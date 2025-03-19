@@ -1,0 +1,31 @@
+{
+    "topLevelTabs": [
+      { "path": "/dashboard", "label": "Dashboard", "icon": "src/assets/react.svg" }
+    ],
+    "groups": {
+      "Org. Financial Status": [
+        { "path": "/budgets", "label": "Budgets", "icon": "src/assets/react.svg" },
+        { "path": "/deposits", "label": "Deposits", "icon": "src/assets/react.svg" },
+        { "path": "/expenses", "label": "Expenses", "icon": "src/assets/react.svg" },
+        { "path": "/reports", "label": "Reports", "icon": "src/assets/react.svg" }
+      ],
+      "Your Obligations": {
+        "default": [
+          { "path": "/payments", "label": "Payments", "icon": "src/assets/react.svg" }
+        ],
+        "Representative": [
+          { "path": "/payments", "label": "Payments", "icon": "src/assets/react.svg" },
+          { "path": "/collections", "label": "Collections", "icon": "src/assets/react.svg" }
+        ]
+      },
+      "Admin Panel": [
+        { "path": "/user-management", "label": "User Management", "icon": "src/assets/react.svg" },
+        { "path": "/site-settings", "label": "Site Settings", "icon": "src/assets/react.svg" }
+      ],
+      "Preferences": [
+        { "path": "/settings", "label": "Settings", "icon": "src/assets/react.svg" },
+        { "path": "/logout", "label": "Log Out", "icon": "src/assets/react.svg" }
+      ]
+    }
+  }
+  

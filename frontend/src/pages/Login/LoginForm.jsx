@@ -8,7 +8,7 @@ import {
 } from "../../components/ui/Card";
 import { useForm } from "react-hook-form";
 import { useLogin } from "./useLogin"; // Import the custom hook
-import { useEffect } from "react";
+import LoginMessage from "../../components/ui/message"; // Import LoginMessage
 
 export function LoginForm() {
   const {
@@ -23,15 +23,18 @@ export function LoginForm() {
     login(data, reset); // Call the custom hook function
   };
 
-  const errorStyle = "text-red-500 text-xs mt-0.5";
-  const successStyle = "text-green-500 text-xs mt-0.5";
-
   return (
     <Card className="w-full shadow-xl rounded-3xl bg-white p-10 md:w-md md:h-125 xl:px-18">
       <CardHeader>
         <CardTitle className="text-center font-bold text-3xl">Log-in</CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Fixed-height container for login message */}
+        <div className="h-10 flex items-center justify-center">
+          {error && <LoginMessage type="error" message={error} />}
+          {success && <LoginMessage type="success" message={success} />}
+        </div>
+
         <form
           onSubmit={handleSubmit(onSubmit)}
           className="space-y-4 flex flex-col items-center"
@@ -40,7 +43,7 @@ export function LoginForm() {
           <div className="w-full">
             <label
               htmlFor="studentId"
-              className="block text-md font-medium text-gray-700 mt-10"
+              className="block text-md font-medium text-gray-700 mt-5"
             >
               Student ID
             </label>
@@ -59,9 +62,13 @@ export function LoginForm() {
               className="mt-1 w-full"
               disabled={loading}
             />
-            {errors.studentId && (
-              <p className={errorStyle}>{errors.studentId.message}</p>
-            )}
+            <div className="h-5">
+              {errors.studentId && (
+                <p className="text-red-500 text-xs mt-0.5">
+                  {errors.studentId.message}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Password Field */}
@@ -87,22 +94,20 @@ export function LoginForm() {
               className="mt-1 w-full"
               disabled={loading}
             />
-            {errors.password && (
-              <p className={errorStyle}>{errors.password.message}</p>
-            )}
+            <div className="h-5">
+              {errors.password && (
+                <p className="text-red-500 text-xs mt-0.5">
+                  {errors.password.message}
+                </p>
+              )}
+            </div>
           </div>
-
-          {/* Show error from custom hook */}
-          {error && <p className={errorStyle}>{error}</p>}
-
-          {/* Show success message */}
-          {success && <p className={successStyle}>{success}</p>}
 
           {/* Submit Button */}
           <Button
             type="submit"
             aria-label="Sign in"
-            className="w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 mt-10 sm:mt-16"
+            className="rounded-md transition w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 mt-5 sm:mt-8"
             disabled={loading}
           >
             {loading ? "Signing in..." : "Sign-in"}

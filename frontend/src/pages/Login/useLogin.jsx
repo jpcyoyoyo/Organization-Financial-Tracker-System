@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import LoginMessage from "../../components/ui/message"; // Import LoginMessage
 
 export function useLogin() {
   const [loading, setLoading] = useState(false);
@@ -45,6 +46,7 @@ export function useLogin() {
       }
 
       sessionStorage.setItem("authToken", result.token);
+      sessionStorage.setItem("user", JSON.stringify(result.user));
 
       setSuccess("Login successful! Redirecting...");
       console.log("User Logged In:", result.user);
@@ -63,5 +65,5 @@ export function useLogin() {
     }
   };
 
-  return { login, loading, error, success };
+  return { login, loading, error, success, LoginMessage }; // Return LoginMessage
 }
