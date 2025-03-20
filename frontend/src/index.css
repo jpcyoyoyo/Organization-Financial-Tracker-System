@@ -9,6 +9,7 @@
 
 ::-webkit-scrollbar {
   width: 8px; /* Scrollbar width */
+  height: 8px; /* Scrollbar height */
 }
 
 ::-webkit-scrollbar-track {
@@ -22,4 +23,34 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555; /* Hover effect */
+}
+
+::-webkit-scrollbar-button {
+  background: #ccc; /* Default background color for the arrow buttons */
+  border-radius: 4px; /* Rounded corners */
+  height: 8px; /* Height of the arrow buttons */
+  width: 8px; /* Width of the arrow buttons */
+}
+
+::-webkit-scrollbar-button:hover {
+  background: #888; /* Change background color on hover */
+}
+
+/* Downward-pointing arrow */
+::-webkit-scrollbar-button:single-button:vertical:decrement {
+  clip-path: polygon(50% 100%, 0% 0%, 100% 0%); /* Triangle pointing down */
+}
+
+/* Right-pointing arrow (for horizontal scrollbars) */
+::-webkit-scrollbar-button:single-button:horizontal:increment {
+  clip-path: polygon(0% 0%, 100% 50%, 0% 100%); /* Triangle pointing right */
+}
+
+/* Left-pointing arrow (for horizontal scrollbars) */
+::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  clip-path: polygon(100% 0%, 0% 50%, 100% 100%); /* Triangle pointing left */
+}
+
+body {
+  overflow-x: hidden;
 }

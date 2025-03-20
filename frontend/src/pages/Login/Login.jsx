@@ -2,11 +2,11 @@ import BackgroundSection from "../../components/ui/background";
 import { Helmet } from "react-helmet-async";
 import { LoginForm } from "./LoginForm";
 import Logo from "../../components/ui/logo";
-import useAuth from "../../hooks/useAuth";
+import useLoginAuth from "../../hooks/useLoginAuth";
 import { motion } from "framer-motion"; // Import framer-motion
 
 export default function LoginPage() {
-  useAuth(); // Check if the user is authenticated
+  useLoginAuth(); // Check if the user is authenticated
 
   return (
     <motion.div

@@ -1,3 +1,4 @@
+// App.jsx
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import {
   BrowserRouter as Router,
@@ -8,14 +9,42 @@ import {
 import { useEffect, useState } from "react";
 import LoginPage from "./pages/Login/Login";
 import Dashboard from "./pages/Dashboard/Dashboard";
+import Budgets from "./pages/Budgets/Budgets";
+import Reports from "./pages/Reports/Reports";
+import Settings from "./pages/Settings/Settings";
+import HomeLayout from "./pages/Home/Home";
+import Logout from "./pages/Logout/Logout";
+import Deposits from "./pages/Deposits/Deposits";
+import Expenses from "./pages/Expenses/Expenses";
+import Meetings from "./pages/Meetings/Meetings";
+import YourPayments from "./pages/YourPayments/YourPayments";
+import YourCollections from "./pages/YourCollections/YourCollections";
+import PlannedBudgets from "./pages/PlannedBudgets/PlannedBudgets";
+import AnnouncementRequests from "./pages/AnnouncementRequests/AnnouncementRequests";
+import AuditReports from "./pages/AuditReports/AuditReports";
+import FinancialStatements from "./pages/FinancialStatements/FinancialStatements";
+import OrganizationProperties from "./pages/OrganizationProperties/OrganizationProperties";
+import Receipts from "./pages/Receipts/Receipts";
+import DraftBudget from "./pages/DraftBudget/DraftBudget";
+import DraftPayments from "./pages/DraftPayments/DraftPayments";
+import ManageDeposits from "./pages/ManageDeposits/ManageDeposits";
+import ManageExpenses from "./pages/ManageExpenses/ManageExpenses";
+import ManageFinancialReports from "./pages/ManageFinancialReports/ManageFinancialReports";
+import Approvals from "./pages/Approvals/Approvals";
+import UserManagement from "./pages/UserManagement/UserManagement";
+import Logs from "./pages/Logs/Logs";
+import SiteSettings from "./pages/SiteSettings/SiteSettings";
+import RequestAnnouncement from "./pages/RequestAnnouncement/RequestAnnouncement";
+import ManageMeetings from "./pages/ManageMeetings/ManageMeetings";
+import OrganizationDocuments from "./pages/OrganizationDocuments/OrganizationDocuments";
+import Reciepts from "./pages/Receipts/Receipts";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check session variable
     const userSession = sessionStorage.getItem("authToken");
-    setIsAuthenticated(!!userSession); // Convert to boolean
+    setIsAuthenticated(!!userSession);
   }, []);
 
   return (
@@ -30,26 +59,75 @@ export default function App() {
       </Helmet>
       <Router>
         <Routes>
-          {/* Public Route */}
           <Route
             path="/login"
             element={<LoginPage setIsAuthenticated={setIsAuthenticated} />}
           />
-
-          {/* Protected Route */}
           <Route
-            path="/dashboard"
-            element={
-              isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />
-            }
+            path="/logout"
+            element={<Logout setIsAuthenticated={setIsAuthenticated} />}
           />
-
-          {/* Redirect Unknown Routes */}
+          <Route
+            path="/"
+            element={
+              isAuthenticated ? (
+                <HomeLayout />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="budgets" element={<Budgets />} />
+            <Route path="deposits" element={<Deposits />} />
+            <Route path="expenses" element={<Expenses />} />
+            <Route path="meetings" element={<Meetings />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="your-payments" element={<YourPayments />} />
+            <Route path="your-collections" element={<YourCollections />} />
+            <Route path="planned-budgets" element={<PlannedBudgets />} />
+            <Route
+              path="announcement-requests"
+              element={<AnnouncementRequests />}
+            />
+            <Route path="audit-reports" element={<AuditReports />} />
+            <Route
+              path="financial-statements"
+              element={<FinancialStatements />}
+            />
+            <Route
+              path="organization-properties"
+              element={<OrganizationProperties />}
+            />
+            <Route path="receipts" element={<Receipts />} />
+            <Route path="draft-budget" element={<DraftBudget />} />
+            <Route path="draft-payments" element={<DraftPayments />} />
+            <Route path="manage-deposits" element={<ManageDeposits />} />
+            <Route path="manage-expenses" element={<ManageExpenses />} />
+            <Route
+              path="manage-financial-reports"
+              element={<ManageFinancialReports />}
+            />
+            <Route path="approvals" element={<Approvals />} />
+            <Route path="user-management" element={<UserManagement />} />
+            <Route path="logs" element={<Logs />} />
+            <Route path="site-settings" element={<SiteSettings />} />
+            <Route
+              path="request-announcement"
+              element={<RequestAnnouncement />}
+            />
+            <Route path="manage-meetings" element={<ManageMeetings />} />
+            <Route
+              path="organization-docs"
+              element={<OrganizationDocuments />}
+            />
+            <Route path="reciepts" element={<Reciepts />} />
+          </Route>
           <Route
             path="*"
-            element={
-              <Navigate to={isAuthenticated ? "/dashboard" : "/login"} />
-            }
+            element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />}
           />
         </Routes>
       </Router>

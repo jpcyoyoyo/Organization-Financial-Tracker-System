@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function useAuth() {
+export default function useHomeAuth() {
   // Change to default export
   const navigate = useNavigate(); // Import navigation hook
 
@@ -9,8 +9,6 @@ export default function useAuth() {
     const authToken = sessionStorage.getItem("authToken");
     if (!authToken) {
       navigate("/login"); // Redirect to login if not authenticated
-    } else {
-      navigate("/dashboard"); // Redirect to dashboard if authenticated
     }
   }, [navigate]);
 }

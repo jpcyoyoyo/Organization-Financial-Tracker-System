@@ -10,5 +10,6 @@ module.exports = {
   plugins: [
     require("tailwind-scrollbar"),
     require("tailwind-scrollbar-hide"), // Optional for hiding scrollbars
+    require("tailwind-scrollbar-utilities"), // Optional for hiding scrollbars
   ],
 };
