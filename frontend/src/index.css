@@ -8,25 +8,25 @@
 }
 
 ::-webkit-scrollbar {
-  width: 8px; /* Scrollbar width */
-  height: 8px; /* Scrollbar height */
+  width: 0.5px; /* Scrollbar width */
+  height: 0.5px; /* Scrollbar height */
 }
 
 ::-webkit-scrollbar-track {
-  background: #f0f0f0; /* Scrollbar track */
+  background: #f0f0f000; /* Scrollbar track */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888; /* Scrollbar thumb */
+  background: #88888800; /* Scrollbar thumb */
   border-radius: 6px; /* Border radius */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555; /* Hover effect */
+  background: #55555500; /* Hover effect */
 }
 
 ::-webkit-scrollbar-button {
-  background: #ccc; /* Default background color for the arrow buttons */
+  background: #cccccc00; /* Default background color for the arrow buttons */
   border-radius: 4px; /* Rounded corners */
   height: 8px; /* Height of the arrow buttons */
   width: 8px; /* Width of the arrow buttons */

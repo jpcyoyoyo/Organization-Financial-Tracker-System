@@ -1,13 +1,11 @@
-import { Outlet } from "react-router-dom"; // Import the Outlet component from react-router-dom
-import useHomeAuth from "../../hooks/useHomeAuth"; // Import the custom hook
+import { Outlet } from "react-router-dom";
 import { Sidebar } from "../../components/ui/sidebar";
 import BackgroundSection from "../../components/ui/background";
-import { motion } from "framer-motion"; // Import framer-motion
-import { useState } from "react"; // Import useState
+import { motion } from "framer-motion";
+import { useState } from "react";
 
 export default function Home() {
-  useHomeAuth(); // Check if the user is authenticated
-  const [isCollapsed, setIsCollapsed] = useState(false); // State for sidebar collapse
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <motion.div
@@ -17,18 +15,16 @@ export default function Home() {
       transition={{ duration: 1 }}
     >
       <BackgroundSection>
-        <div className="flex overflow-x-hidden">
-          <Sidebar
-            isCollapsed={isCollapsed}
-            setIsCollapsed={setIsCollapsed} // Pass state and setter to Sidebar
-          />
+        <div className="flex overflow-hidden">
+          <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
           <main
-            className={`absolute transition-all duration-300 top-0 h-full overflow-x-hidden ${
-              isCollapsed ? "left-16" : "left-76"
+            className={`ml-0 transition-all duration-300 top-0 h-full overflow-hidden grow ${
+              isCollapsed ? "md:ml-14" : "md:ml-76"
             } w-full`}
           >
             {/* The outlet renders the nested route components */}
-            <Outlet />
+
+            <Outlet context={{ isCollapsed }} />
           </main>
         </div>
       </BackgroundSection>

@@ -63,6 +63,19 @@ app.post("/login", async (req, res) => {
   });
 });
 
+app.post("/fetch-users", async (req, res) => {
+  const sql = "SELECT * FROM user_accounts";
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    return res.json({ status: true, users: results });
+  });
+});
+
 // 🔹 Start Express Server
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {

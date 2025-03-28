@@ -7,9 +7,7 @@ export default function useLoginAuth() {
 
   useEffect(() => {
     const authToken = sessionStorage.getItem("authToken");
-    if (!authToken) {
-      navigate("/login"); // Redirect to login if not authenticated
-    } else {
+    if (authToken) {
       navigate("/dashboard"); // Redirect to dashboard if authenticated
     }
   }, [navigate]);

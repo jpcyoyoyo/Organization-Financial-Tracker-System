@@ -1,19 +1,10 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import LoginMessage from "../../components/ui/message"; // Import LoginMessage
+import { useState } from "react";
 
 export function useLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [redirect, setRedirect] = useState(false); // New state for redirect
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (redirect) {
-      navigate("/dashboard");
-    }
-  }, [redirect, navigate]);
+  const [redirect, setRedirect] = useState(false); // Return this to handle navigation in the component
 
   const login = async (data, reset) => {
     setLoading(true);
@@ -26,7 +17,7 @@ export function useLogin() {
         password: data.password.trim(),
       };
 
-      const response = await fetch("http://localhost:8081/login", {
+      const response = await fetch("http://192.168.100.21:8081/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sanitizedData),
@@ -45,15 +36,16 @@ export function useLogin() {
         throw new Error(result.error || "Login failed");
       }
 
-      sessionStorage.setItem("authToken", result.token);
-      sessionStorage.setItem("user", JSON.stringify(result.user));
+      if (result.token) {
+        sessionStorage.setItem("authToken", result.token);
+        sessionStorage.setItem("user", JSON.stringify(result.user));
+      }
 
       setSuccess("Login successful! Redirecting...");
       console.log("User Logged In:", result.user);
 
       reset();
 
-      // Set redirect to true after a short delay
       setTimeout(() => {
         setRedirect(true);
       }, 1000);
@@ -65,5 +57,5 @@ export function useLogin() {
     }
   };
 
-  return { login, loading, error, success, LoginMessage }; // Return LoginMessage
+  return { login, loading, error, success, redirect };
 }

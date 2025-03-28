@@ -1,8 +1,10 @@
 import PropTypes from "prop-types";
 
-export default function BackgroundSection({ children }) {
+export default function BackgroundSection({ className = "", children }) {
   return (
-    <div className="flex min-h-lvh bg-[#ffc34c] bg-[url('/src/assets/tile.png')] bg-cover bg-repeat bg-center flex-col justify-center items-center p-8 font-[archivo]">
+    <div
+      className={`flex min-h-lvh bg-[#ffb728] bg-[url('/src/assets/tile.png')] bg-cover bg-repeat bg-center flex-col font-[archivo] overflow-hidden ${className}`}
+    >
       {children}
     </div>
   );
@@ -10,4 +12,5 @@ export default function BackgroundSection({ children }) {
 
 BackgroundSection.propTypes = {
   children: PropTypes.node.isRequired,
+  className: PropTypes.string,
 };

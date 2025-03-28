@@ -20,11 +20,7 @@ CardHeader.propTypes = {
 };
 
 export function CardTitle({ children, className = "" }) {
-  return (
-    <h2 className={`text-5xl font-bold text-center ${className}`}>
-      {children}
-    </h2>
-  );
+  return <h2 className={`font-bold text-center ${className}`}>{children}</h2>;
 }
 
 CardTitle.propTypes = {

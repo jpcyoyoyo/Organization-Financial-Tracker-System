@@ -75,8 +75,8 @@
       },
       "Admin Panel": [
         { "path": "/user-management", "label": "User Management", "icon": "src/assets/react.svg" },
-        { "path": "/logs", "label": "Logs", "icon": "src/assets/react.svg" },
-        { "path": "/site-settings", "label": "Site Settings", "icon": "src/assets/react.svg" }
+        { "path": "/account-creation", "label": "Account Creation", "icon": "src/assets/react.svg" },
+        { "path": "/logs", "label": "Logs", "icon": "src/assets/react.svg" }
       ],
       "Preferences": [
         { "path": "/settings", "label": "Settings", "icon": "src/assets/react.svg" },

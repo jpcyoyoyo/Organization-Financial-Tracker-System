@@ -40,12 +40,12 @@ import OrganizationDocuments from "./pages/OrganizationDocuments/OrganizationDoc
 import Reciepts from "./pages/Receipts/Receipts";
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
 
   useEffect(() => {
     const userSession = sessionStorage.getItem("authToken");
-    setIsAuthenticated(!!userSession);
-  }, []);
+    setIsAuthenticated(userSession ? true : false);
+  }, []); // Only run on mount
 
   return (
     <HelmetProvider>
@@ -57,80 +57,84 @@ export default function App() {
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Helmet>
-      <Router>
-        <Routes>
-          <Route
-            path="/login"
-            element={<LoginPage setIsAuthenticated={setIsAuthenticated} />}
-          />
-          <Route
-            path="/logout"
-            element={<Logout setIsAuthenticated={setIsAuthenticated} />}
-          />
-          <Route
-            path="/"
-            element={
-              isAuthenticated ? (
-                <HomeLayout />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="budgets" element={<Budgets />} />
-            <Route path="deposits" element={<Deposits />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="meetings" element={<Meetings />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="your-payments" element={<YourPayments />} />
-            <Route path="your-collections" element={<YourCollections />} />
-            <Route path="planned-budgets" element={<PlannedBudgets />} />
+
+      {isAuthenticated === null ? (
+        <div>Loading...</div> // Add a loading state to prevent unnecessary renders
+      ) : (
+        <Router>
+          <Routes>
             <Route
-              path="announcement-requests"
-              element={<AnnouncementRequests />}
-            />
-            <Route path="audit-reports" element={<AuditReports />} />
-            <Route
-              path="financial-statements"
-              element={<FinancialStatements />}
+              path="/login"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/dashboard" replace />
+                ) : (
+                  <LoginPage setIsAuthenticated={setIsAuthenticated} />
+                )
+              }
             />
             <Route
-              path="organization-properties"
-              element={<OrganizationProperties />}
+              path="/logout"
+              element={<Logout setIsAuthenticated={setIsAuthenticated} />}
             />
-            <Route path="receipts" element={<Receipts />} />
-            <Route path="draft-budget" element={<DraftBudget />} />
-            <Route path="draft-payments" element={<DraftPayments />} />
-            <Route path="manage-deposits" element={<ManageDeposits />} />
-            <Route path="manage-expenses" element={<ManageExpenses />} />
-            <Route
-              path="manage-financial-reports"
-              element={<ManageFinancialReports />}
-            />
-            <Route path="approvals" element={<Approvals />} />
-            <Route path="user-management" element={<UserManagement />} />
-            <Route path="logs" element={<Logs />} />
-            <Route path="site-settings" element={<SiteSettings />} />
-            <Route
-              path="request-announcement"
-              element={<RequestAnnouncement />}
-            />
-            <Route path="manage-meetings" element={<ManageMeetings />} />
-            <Route
-              path="organization-docs"
-              element={<OrganizationDocuments />}
-            />
-            <Route path="reciepts" element={<Reciepts />} />
-          </Route>
-          <Route
-            path="*"
-            element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />}
-          />
-        </Routes>
-      </Router>
+
+            {/* Protected Routes */}
+            {isAuthenticated ? (
+              <Route path="/" element={<HomeLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="budgets" element={<Budgets />} />
+                <Route path="deposits" element={<Deposits />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="meetings" element={<Meetings />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="your-payments" element={<YourPayments />} />
+                <Route path="your-collections" element={<YourCollections />} />
+                <Route path="planned-budgets" element={<PlannedBudgets />} />
+                <Route
+                  path="announcement-requests"
+                  element={<AnnouncementRequests />}
+                />
+                <Route path="audit-reports" element={<AuditReports />} />
+                <Route
+                  path="financial-statements"
+                  element={<FinancialStatements />}
+                />
+                <Route
+                  path="organization-properties"
+                  element={<OrganizationProperties />}
+                />
+                <Route path="receipts" element={<Receipts />} />
+                <Route path="draft-budget" element={<DraftBudget />} />
+                <Route path="draft-payments" element={<DraftPayments />} />
+                <Route path="manage-deposits" element={<ManageDeposits />} />
+                <Route path="manage-expenses" element={<ManageExpenses />} />
+                <Route
+                  path="manage-financial-reports"
+                  element={<ManageFinancialReports />}
+                />
+                <Route path="approvals" element={<Approvals />} />
+                <Route path="user-management" element={<UserManagement />} />
+                <Route path="logs" element={<Logs />} />
+                <Route path="site-settings" element={<SiteSettings />} />
+                <Route
+                  path="request-announcement"
+                  element={<RequestAnnouncement />}
+                />
+                <Route path="manage-meetings" element={<ManageMeetings />} />
+                <Route
+                  path="organization-docs"
+                  element={<OrganizationDocuments />}
+                />
+                <Route path="reciepts" element={<Reciepts />} />
+              </Route>
+            ) : (
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            )}
+          </Routes>
+        </Router>
+      )}
     </HelmetProvider>
   );
 }
