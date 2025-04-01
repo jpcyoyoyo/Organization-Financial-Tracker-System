@@ -8,6 +8,7 @@ import closeIcon from "../../assets/close.svg";
 import nextIcon from "../../assets/next.svg";
 import prevIcon from "../../assets/prev.svg";
 import { motion } from "framer-motion";
+import FilterPopup from "../../components/ui/filterpopup"; // Adjust path as needed
 
 /**
  * Example listConfig structure:
@@ -29,16 +30,19 @@ import { motion } from "framer-motion";
 
 export default function SearchListCard({
   cardName,
+  userData,
   listConfig,
   fetchUrl,
   isCollapsed,
+  testMode,
+  testData, // Expected shape: { data, years }
 }) {
   // ------------------------------
   // State Variables
   // ------------------------------
   const [data, setData] = useState([]); // Fetched items
   const [loading, setLoading] = useState(false); // Loading state
-  const [availableYears, setAvailableYears] = useState([]); // Populated at initial fetch
+  const [availableYears, setAvailableYears] = useState([]); // Available years
 
   // Search & Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -61,8 +65,7 @@ export default function SearchListCard({
   // ------------------------------
   function getMode() {
     const hasSearch = searchTerm.trim().length > 0;
-    const hasFilter = year || startDate || endDate; // any filter field used?
-
+    const hasFilter = year || startDate || endDate;
     if (hasSearch && hasFilter) return "Mixed";
     if (hasSearch) return "Search";
     if (hasFilter) return "Filter";
@@ -73,7 +76,17 @@ export default function SearchListCard({
   // Build request body based on mode
   // ------------------------------
   function buildRequestBody(mode) {
-    const body = { mode };
+    let parsedUser = {};
+    try {
+      parsedUser = JSON.parse(userData || "{}");
+    } catch (e) {
+      console.warn("Invalid userData JSON:", e);
+    }
+
+    const body = {
+      mode,
+      user: parsedUser,
+    };
     if (mode === "Search" || mode === "Mixed") {
       body.searchTerm = searchTerm;
     }
@@ -101,7 +114,6 @@ export default function SearchListCard({
       }
       const result = await response.json();
       const fetchedData = Array.isArray(result.data) ? result.data : [];
-      // Sort by dateApproved descending (newest first)
       const sortedData = fetchedData.sort(
         (a, b) => new Date(b.dateApproved) - new Date(a.dateApproved)
       );
@@ -116,68 +128,26 @@ export default function SearchListCard({
   }
 
   // ------------------------------
-  // Temporary Result Data (for testing)
-  // Remove this effect when testing is complete.
+  // On mount: use testData if in testMode; otherwise, fetch Populate
   // ------------------------------
   useEffect(() => {
-    const tempData = [
-      {
-        budgetName: "Test Budget 1",
-        totalBudget: "$1,000",
-        dateApproved: "2021-01-01",
-      },
-      {
-        budgetName: "Test Budget 2",
-        totalBudget: "$2,000",
-        dateApproved: "2021-02-01",
-      },
-      {
-        budgetName: "Test Budget 3",
-        totalBudget: "$1,000",
-        dateApproved: "2021-03-01",
-      },
-      {
-        budgetName: "Test Budget 4",
-        totalBudget: "$2,000",
-        dateApproved: "2021-04-01",
-      },
-      {
-        budgetName: "Test Budget 5",
-        totalBudget: "$1,000",
-        dateApproved: "2021-05-01",
-      },
-      {
-        budgetName: "Test Budget 6",
-        totalBudget: "$1,000",
-        dateApproved: "2021-06-01",
-      },
-    ];
-    const tempYears = [2021, 2022, 2023];
-    // Sort the tempData by date descending
-    const sortedTempData = tempData.sort(
-      (a, b) => new Date(b.dateApproved) - new Date(a.dateApproved)
-    );
-    setData(sortedTempData);
-    setAvailableYears(tempYears);
-  }, []);
-
-  // ------------------------------
-  // 1) On mount: fetch with "Populate"
-  // ------------------------------
-  /*
-  useEffect(() => {
-    fetchData("Populate");
+    if (testMode && testData) {
+      const sortedTestData = testData.data.sort(
+        (a, b) => new Date(b.dateApproved) - new Date(a.dateApproved)
+      );
+      setData(sortedTestData);
+      setAvailableYears(testData.years);
+    } else {
+      fetchData("Populate");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  */
+  }, [testMode, testData]);
 
   // ------------------------------
-  // 2) Handle "Search" Button
+  // Handle "Search" Button
   // ------------------------------
   function handleSearch() {
-    // Prevent search if search field is blank
     if (!searchTerm.trim()) {
-      // If blank, repopulate the list using "Populate" mode
       fetchData("Populate");
       return;
     }
@@ -187,18 +157,17 @@ export default function SearchListCard({
   }
 
   // ------------------------------
-  // 3) Auto-fetch Populate when search field is cleared
+  // Auto-fetch Populate when search field is cleared
   // ------------------------------
   useEffect(() => {
     if (!searchTerm.trim()) {
-      // If searchTerm becomes empty, repopulate data
       fetchData("Populate");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
   // ------------------------------
-  // 4) Handle "Apply Filter" in Popup
+  // Handle "Apply Filter" in Popup (via FilterPopup)
   // ------------------------------
   function handleApplyFilter() {
     setFilterOpen(false);
@@ -225,69 +194,19 @@ export default function SearchListCard({
   // ------------------------------
   return (
     <div className="font-[archivo] text-gray-800 relative">
-      {/* FILTER POPUP (overlay) */}
+      {/* Filter Popup */}
       {filterOpen && (
-        <div className="fixed inset-0 bg-[#4a556584] flex items-center justify-center z-50">
-          {/* Popup Container */}
-          <div className="bg-white rounded-md p-4 w-11/12 md:w-1/2 max-w-lg relative">
-            {/* Close Button */}
-            <Button
-              className="absolute top-2 right-2 text-gray-600 hover:text-black cursor-pointer"
-              onClick={() => setFilterOpen(false)}
-            >
-              &times;
-            </Button>
-            <h2 className="text-xl font-bold mb-4">Filter</h2>
-
-            {/* Year Dropdown */}
-            <label className="block mb-2 text-sm font-semibold">Year</label>
-            <select
-              className="border border-gray-300 rounded-md px-3 py-1 w-full mb-4"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-            >
-              <option value="">-- Select Year --</option>
-              {availableYears.map((yr) => (
-                <option key={yr} value={yr}>
-                  {yr}
-                </option>
-              ))}
-            </select>
-
-            {/* Date Range */}
-            <label className="block mb-2 text-sm font-semibold">
-              Start Date
-            </label>
-            <Input
-              type="date"
-              className="border border-gray-300 rounded-md px-3 py-1 w-full mb-4"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-            <label className="block mb-2 text-sm font-semibold">End Date</label>
-            <Input
-              type="date"
-              className="border border-gray-300 rounded-md px-3 py-1 w-full mb-4"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-
-            <div className="flex justify-end space-x-2">
-              <Button
-                className="px-4 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 cursor-pointer"
-                onClick={() => setFilterOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="px-4 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
-                onClick={handleApplyFilter}
-              >
-                Apply
-              </Button>
-            </div>
-          </div>
-        </div>
+        <FilterPopup
+          availableYears={availableYears}
+          year={year}
+          startDate={startDate}
+          endDate={endDate}
+          onYearChange={setYear}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+          onApply={handleApplyFilter}
+          onCancel={() => setFilterOpen(false)}
+        />
       )}
 
       {/* HEADER: Card Name + Search/Filter (Desktop) or Hamburger (Mobile) */}
@@ -296,9 +215,7 @@ export default function SearchListCard({
           isCollapsed ? "md:py-2" : "lg:py-2"
         }`}
       >
-        {/* Left Section: Card Name or Hamburger for Mobile */}
         <div className="flex self-stretch">
-          {/* MOBILE (below md) */}
           {!showMobileSearch && (
             <motion.div
               initial={{ opacity: 0.5, x: -4 }}
@@ -319,7 +236,6 @@ export default function SearchListCard({
                     className="ml-2 px-2 py-1 bg-gray-300 rounded hover:bg-gray-400 cursor-pointer"
                     onClick={() => setShowMobileSearch(true)}
                   >
-                    {/* Hamburger Icon */}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className="h-5 w-5"
@@ -339,14 +255,11 @@ export default function SearchListCard({
               </div>
             </motion.div>
           )}
-
-          {/* DESKTOP (md and up) */}
           <div className={`hidden ${isCollapsed ? "md:block" : "lg:block"}`}>
             <h1 className="text-2xl md:text-3xl font-bold">{cardName}</h1>
           </div>
         </div>
 
-        {/* Right Section: Search & Filter (Desktop only) */}
         <div
           className={`hidden transition-all ${
             isCollapsed ? "md:flex" : "lg:flex"
@@ -378,7 +291,6 @@ export default function SearchListCard({
         </div>
       </div>
 
-      {/* MOBILE Search & Filter View (below md) */}
       {showMobileSearch && (
         <div
           className={`transition-all ${
@@ -434,7 +346,6 @@ export default function SearchListCard({
       )}
 
       <div className="bg-white p-4 rounded-b-xl">
-        {/* LOADING */}
         {loading && (
           <motion.div
             initial={{ opacity: 0.1, x: -4 }}
@@ -447,7 +358,6 @@ export default function SearchListCard({
           </motion.div>
         )}
 
-        {/* LIST ITEMS */}
         {!loading && currentItems.length > 0 && (
           <motion.div
             initial={{ opacity: 0.5, x: -4 }}
@@ -459,10 +369,9 @@ export default function SearchListCard({
               {currentItems.map((rowData, idx) => (
                 <div
                   key={idx}
-                  className="flex flex-row rounded-md overflow-hidden shadow-sm transition-all md:hover:-translate-y-1 cursor-pointer"
+                  className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-md overflow-hidden shadow-sm transition-all md:hover:-translate-y-1 cursor-pointer"
                 >
                   {listConfig.columns.map((col, cIndex) => {
-                    // 1) Icon column
                     if (col.type === "icon") {
                       return (
                         <div
@@ -481,7 +390,6 @@ export default function SearchListCard({
                         </div>
                       );
                     }
-                    // 2) Double variable column
                     if (col.type === "double") {
                       return (
                         <div
@@ -500,7 +408,6 @@ export default function SearchListCard({
                         </div>
                       );
                     }
-                    // 3) Single variable column
                     if (col.type === "single") {
                       return (
                         <div
@@ -526,7 +433,6 @@ export default function SearchListCard({
           </motion.div>
         )}
 
-        {/* NO DATA FOUND */}
         {!loading && data.length === 0 && (
           <motion.div
             initial={{ opacity: 0.1, x: -4 }}
@@ -539,60 +445,76 @@ export default function SearchListCard({
           </motion.div>
         )}
 
-        {/* PAGINATION */}
         {!loading && data.length > 0 && (
-          <div className="flex items-center justify-between mt-14 lg:mt-8">
-            <p className="text-sm text-gray-600">
-              Showing {startIndex + 1} to{" "}
-              {Math.min(startIndex + itemsPerPage, totalItems)} of {totalItems}{" "}
-              entries
-            </p>
-            <div className="flex space-x-2 items-center content-center">
-              <Button
-                onClick={() => handlePageChange(currentPage - 1)}
-                className={`px-1.5 py-0.5 ${
-                  isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
-                } border border-gray-300 rounded-md text-sm hover:bg-gray-200 cursor-pointer`}
-              >
-                <span
-                  className={`hidden ${isCollapsed ? "md:block" : "lg:block"}`}
+          <motion.div
+            initial={{ opacity: 0.1, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 2 }}
+            transition={{ duration: 0.75 }}
+          >
+            <div className="flex items-center justify-between mt-14 lg:mt-8 font-[inter]">
+              <p className="text-sm text-gray-600">
+                Showing {startIndex + 1} to{" "}
+                {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
+                {totalItems} entries
+              </p>
+              <div className="flex space-x-2 items-center content-center">
+                <Button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className={`px-1.5 py-0.5 ${
+                    isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
+                  } rounded-l-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
                 >
-                  Previous
-                </span>
-                <img
-                  src={prevIcon}
-                  width="20"
-                  className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}
-                  alt="prev icon"
-                />
-              </Button>
-              <h1
-                className={`font-semibold text-base ${
-                  isCollapsed ? "md:text-base" : "lg:text-base"
-                }`}
-              >
-                {currentPage}
-              </h1>
-              <Button
-                onClick={() => handlePageChange(currentPage + 1)}
-                className={`px-1.5 py-0.5 ${
-                  isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
-                } border border-gray-300 rounded-md text-sm hover:bg-gray-200 cursor-pointer`}
-              >
-                <span
-                  className={`hidden ${isCollapsed ? "md:block" : "lg:block"}`}
+                  <span
+                    className={`hidden ${
+                      isCollapsed ? "md:block" : "lg:block"
+                    }`}
+                  >
+                    Previous
+                  </span>
+                  <img
+                    src={prevIcon}
+                    width="20"
+                    className={`block ${
+                      isCollapsed ? "md:hidden" : "lg:hidden"
+                    }`}
+                    alt="prev icon"
+                  />
+                </Button>
+                <h1
+                  className={`font-semibold text-base bg-[#DEE1E6] w-8 text-center ${
+                    isCollapsed
+                      ? "md:text-base md:h-7 md:p-0.5"
+                      : "lg:text-base lg:h-7 lg:p-0.5"
+                  }`}
                 >
-                  Next
-                </span>
-                <img
-                  src={nextIcon}
-                  width="20"
-                  className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}
-                  alt="next icon"
-                />
-              </Button>
+                  {currentPage}
+                </h1>
+                <Button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className={`px-1.5 py-0.5 ${
+                    isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
+                  } rounded-r-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
+                >
+                  <span
+                    className={`hidden ${
+                      isCollapsed ? "md:block" : "lg:block"
+                    }`}
+                  >
+                    Next
+                  </span>
+                  <img
+                    src={nextIcon}
+                    width="20"
+                    className={`block ${
+                      isCollapsed ? "md:hidden" : "lg:hidden"
+                    }`}
+                    alt="next icon"
+                  />
+                </Button>
+              </div>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
@@ -601,7 +523,10 @@ export default function SearchListCard({
 
 SearchListCard.propTypes = {
   cardName: PropTypes.string,
+  userData: PropTypes.string,
   listConfig: PropTypes.object,
   fetchUrl: PropTypes.string,
   isCollapsed: PropTypes.bool,
+  testMode: PropTypes.bool,
+  testData: PropTypes.object,
 };

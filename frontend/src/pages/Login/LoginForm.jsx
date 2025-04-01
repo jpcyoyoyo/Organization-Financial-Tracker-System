@@ -87,7 +87,7 @@ export function LoginForm({ setIsAuthenticated }) {
                     "Student ID must be alphanumeric and can include dashes",
                 },
               })}
-              className="mt-1 w-full text-sm sm:text-base"
+              className="mt-1 w-full text-sm sm:text-base py-1 rounded-lg"
               disabled={loading}
             />
             <div className="h-5">
@@ -119,7 +119,7 @@ export function LoginForm({ setIsAuthenticated }) {
                   message: "Password must be at least 6 characters",
                 },
               })}
-              className="mt-1 w-full text-sm sm:text-base"
+              className="mt-1 w-full text-sm sm:text-base py-1 rounded-lg"
               disabled={loading}
             />
             <div className="h-5">

@@ -102,7 +102,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         className={`fixed top-0 left-0 h-screen z-20 ${
           isCollapsed
             ? "w-19 md:w-14 pt-5 md:px-1.5 px-0 md:bg-[#ffffff7e] md:shadow-xl"
-            : "w-full md:w-76 pt-5 px-3.5 bg-[#ffffff] shadow-xl"
+            : "w-76 md:w-76 pt-5 px-3.5 bg-[#ffffff] shadow-xl"
         } md:pt-7 transition-all backdrop-opacity-10 backdrop-blur-md font-[inter] not-italic`}
       >
         {/* Profile Section (Fixed at Top) */}
@@ -132,7 +132,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   : "block opacity-100 scale-100"
               }`}
             >
-              COMSOC OFTS
+              COMSOC OMS
             </span>
           </div>
 

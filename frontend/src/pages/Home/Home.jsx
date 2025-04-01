@@ -18,7 +18,7 @@ export default function Home() {
         <div className="flex overflow-hidden">
           <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
           <main
-            className={`ml-0 transition-all duration-300 top-0 h-full overflow-hidden grow ${
+            className={`ml-0 transition-all duration-300 top-0 h-full overflow-hidden ${
               isCollapsed ? "md:ml-14" : "md:ml-76"
             } w-full`}
           >

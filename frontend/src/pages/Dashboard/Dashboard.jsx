@@ -9,9 +9,9 @@ export default function Dashboard() {
 
   const tableConfig = {
     columns: [
-      { header: "Payment Name", fraction: "13/25", variable: "full_name" },
-      { header: "Amount", fraction: "6/25", variable: "student_id" },
-      { header: "Due On", fraction: "6/25", variable: "email" },
+      { header: "Payment Name", fraction: "13/25", variable: "name" },
+      { header: "Amount", fraction: "6/25", variable: "amount" },
+      { header: "Due On", fraction: "6/25", variable: "date_due" },
     ],
   };
 
@@ -21,6 +21,7 @@ export default function Dashboard() {
     <MainContent
       titletab="Dashboard - Organization Financial Tracker"
       contentName="DASHBOARD"
+      textFormat="text-3xl pt-1"
     >
       <motion.div
         initial={{ opacity: 0.5, x: -4 }}
@@ -36,7 +37,7 @@ export default function Dashboard() {
           <TableCard
             title="YOUR PAYMENTS"
             tableConfig={tableConfig}
-            fetchUrl="http://192.168.100.42:8081/fetch"
+            fetchUrl="http://192.168.100.68:8081/fetch-your-payments"
             navUrl="/your-payments"
             userData={userData}
             h="h-43 md:h-57"

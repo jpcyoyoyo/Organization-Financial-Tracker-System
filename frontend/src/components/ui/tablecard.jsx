@@ -33,7 +33,7 @@ export default function TableCard({
         const response = await fetch(fetchUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: userData,
+          body: JSON.parse(userData),
         });
         const result = await response.json();
 

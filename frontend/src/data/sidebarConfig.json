@@ -3,37 +3,47 @@
       { "path": "/dashboard", "label": "Dashboard", "icon": "src/assets/react.svg" }
     ],
     "groups": {
+      "Org. Plans and Events": [
+        { "path": "/meetings", "label": "Meetings", "icon": "src/assets/react.svg" },
+        { "path": "/events", "label": "Events", "icon": "src/assets/react.svg" },
+        { "path": "/announcements", "label": "Announcements", "icon": "src/assets/react.svg" }
+      ],
       "Org. Financial Status": [
         { "path": "/budgets", "label": "Budgets", "icon": "src/assets/react.svg" },
         { "path": "/deposits", "label": "Deposits", "icon": "src/assets/react.svg" },
         { "path": "/expenses", "label": "Expenses", "icon": "src/assets/react.svg" },
-        { "path": "/meetings", "label": "Meetings", "icon": "src/assets/react.svg" },
         { "path": "/reports", "label": "Reports", "icon": "src/assets/react.svg" }
       ],
       "Your Obligations": {
         "default": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" }
         ],
         "Representative": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
         ],
         "Peace Officer": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
         ],
         "Procurement Officer": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
         ],
         "Communication Officer": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/announcement-requests", "label": "Announcement Requests", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
         ],
         "Auditor": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/audit-reports", "label": "Audit Reports", "icon": "src/assets/react.svg" },
           { "path": "/financial-statements", "label": "Financial Statements", "icon": "src/assets/react.svg" },
           { "path": "/organization-properties", "label": "Organization Properties", "icon": "src/assets/react.svg" },
@@ -42,6 +52,7 @@
         ],
         "Treasurer": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
           { "path": "/draft-budget", "label": "Draft Budget", "icon": "src/assets/react.svg" },
           { "path": "/draft-payments", "label": "Draft Payments", "icon": "src/assets/react.svg" },
@@ -52,7 +63,7 @@
         ],
         "Secretary": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/manage-meetings", "label": "Manage Meetings", "icon": "src/assets/react.svg" },
           { "path": "/organization-docs", "label": "Organization Documents", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
@@ -60,14 +71,14 @@
         ],
         "Vice-President": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/approvals", "label": "Approvals", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
           { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
         ],
         "President": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/approvals", "label": "Approvals", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
           { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }

@@ -13,7 +13,7 @@ const db = mysql.createConnection({
   host: "localhost",
   user: "root",
   password: "",
-  database: "ofts_db",
+  database: "oms_db",
 });
 
 // 🔹 Login Route (Fixed bcrypt compatibility)
@@ -26,7 +26,7 @@ app.post("/login", async (req, res) => {
       .json({ error: "Student ID and Password are required" });
   }
 
-  const sql = "SELECT * FROM user_accounts WHERE student_id = ?";
+  const sql = "SELECT * FROM user_account WHERE student_id = ?";
 
   db.query(sql, [studentId], async (err, results) => {
     if (err) {
@@ -63,8 +63,34 @@ app.post("/login", async (req, res) => {
   });
 });
 
-app.post("/fetch-users", async (req, res) => {
-  const sql = "SELECT * FROM user_accounts";
+app.post("/fetch-your-payments", async (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ error: "User Data are required" });
+  }
+
+  const sql =
+    "SELECT p.* FROM payment p LEFT JOIN collection c ON p.id = c.payment_id WHERE c.payment_id IS NULL AND p.user_id = ?;";
+
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    return res.json({ status: true, fetch: results });
+  });
+});
+
+app.post("/fetch-budgets", async (req, res) => {
+  const { mode } = req.body;
+
+  let sql;
+
+  if (mode === "Populate") {
+    sql = "SELECT * FROM budget";
+  }
 
   db.query(sql, (err, results) => {
     if (err) {
@@ -72,7 +98,7 @@ app.post("/fetch-users", async (req, res) => {
       return res.status(500).json({ error: "Internal Server Error" });
     }
 
-    return res.json({ status: true, users: results });
+    return res.json({ status: true, data: results });
   });
 });
 

@@ -17,7 +17,7 @@ export default function LoginPage({ setIsAuthenticated }) {
         <title>Login - Organization Financial Tracker</title>
         <meta
           name="description"
-          content="Login to access the Organization Financial Tracker System."
+          content="Login to access the Organization Management System."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,7 +40,7 @@ export default function LoginPage({ setIsAuthenticated }) {
                     COMSOC
                   </h1>
                   <p className="mt-1.5 sm:mt-4 text-sm sm:text-2xl font-bold text-black pl-4 sm:px-4">
-                    ORGANIZATION FINANCIAL TRACKER SYSTEM
+                    ORGANIZATION MANAGEMENT SYSTEM
                   </p>
                 </div>
               </div>

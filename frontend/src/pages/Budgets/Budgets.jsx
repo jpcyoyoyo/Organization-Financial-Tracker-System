@@ -1,7 +1,6 @@
 import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/MainContent";
 import SearchListCard from "../../components/ui/SearchListCard";
-import { motion } from "framer-motion";
 
 export default function Budgets() {
   const { isCollapsed } = useOutletContext();
@@ -28,16 +27,56 @@ export default function Budgets() {
     ],
   };
 
+  const testData = {
+    data: [
+      {
+        budgetName: "Test Budget 1",
+        totalBudget: "$1,000",
+        dateApproved: "2021-01-01",
+      },
+      {
+        budgetName: "Test Budget 2",
+        totalBudget: "$2,000",
+        dateApproved: "2021-02-01",
+      },
+      {
+        budgetName: "Test Budget 3",
+        totalBudget: "$1,000",
+        dateApproved: "2021-03-01",
+      },
+      {
+        budgetName: "Test Budget 4",
+        totalBudget: "$2,000",
+        dateApproved: "2021-04-01",
+      },
+      {
+        budgetName: "Test Budget 5",
+        totalBudget: "$1,000",
+        dateApproved: "2021-05-01",
+      },
+      {
+        budgetName: "Test Budget 6",
+        totalBudget: "$1,000",
+        dateApproved: "2021-06-01",
+      },
+    ],
+    years: [2021, 2022, 2023],
+  };
+
   return (
     <MainContent
       titletab="Budgets - Organization Financial Tracker"
       contentName="BUDGETS"
+      textFormat="text-3xl pt-1"
+      showContentNameMobileOnly={true}
     >
       <SearchListCard
         cardName="APPROVED BUDGETS"
         listConfig={listConfig}
-        fetchUrl="http://your-api.com/approved-budgets"
+        fetchUrl="http://192.168.100.68/fetch-budgets"
         isCollapsed={isCollapsed}
+        testMode={true}
+        testData={testData}
       />
     </MainContent>
   );
