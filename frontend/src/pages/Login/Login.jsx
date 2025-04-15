@@ -24,6 +24,7 @@ export default function LoginPage({ setIsAuthenticated }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin />
       </Helmet>
       <BackgroundSection className="justify-center items-center p-12 sm:p-4">
+        S
         <motion.div
           initial={{ opacity: 0.5, x: -50 }}
           animate={{ opacity: 1, x: 0 }}

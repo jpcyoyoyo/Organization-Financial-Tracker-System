@@ -9,6 +9,7 @@ import prevIcon from "../../assets/prev.svg";
 import { motion } from "framer-motion";
 import FilterPopup from "../../components/ui/filterpopup";
 import Parser from "html-react-parser";
+import { icons } from "../../assets/icons";
 
 /**
  * Example tableConfig:
@@ -58,32 +59,29 @@ export default function SearchTableCard({
   tableConfig,
   fetchUrl,
   isCollapsed,
-  itemsPerPage = 5,
+  itemsPerPage = 7,
   viewModal: ViewModal, // Custom modal component for viewing
   createModal: CreateModal, // Custom modal component for creating
   updateModal: UpdateModal, // Custom modal component for updating
   deleteModal: DeleteModal, // Custom modal component for deleting
   testMode,
   testData, // { data: [...], years: [...] }
+  cardSize = "h-113 md:h-117",
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
   // ------------------------------
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // Search & Filter
   const [searchTerm, setSearchTerm] = useState("");
   const [year, setYear] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [availableYears, setAvailableYears] = useState([]);
-
-  // For toggling filter popup
   const [filterOpen, setFilterOpen] = useState(false);
-
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  // State to track window width for mobile detection
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // ------------------------------
   // State: Modals (Create, View, etc.)
@@ -92,9 +90,13 @@ export default function SearchTableCard({
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
 
-  // ------------------------------
-  // Determine "mode" for fetch
-  // ------------------------------
+  // Update window width on resize
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   function getMode() {
     const hasSearch = searchTerm.trim().length > 0;
     const hasFilter = year || startDate || endDate;
@@ -104,9 +106,6 @@ export default function SearchTableCard({
     return "Populate";
   }
 
-  // ------------------------------
-  // Build request body (include userData)
-  // ------------------------------
   function buildRequestBody(mode) {
     let parsedUser = {};
     try {
@@ -114,11 +113,7 @@ export default function SearchTableCard({
     } catch (e) {
       console.warn("Invalid userData JSON:", e);
     }
-
-    const body = {
-      mode,
-      user: parsedUser,
-    };
+    const body = { mode, user: parsedUser };
     if (mode === "Search" || mode === "Mixed") {
       body.searchTerm = searchTerm;
     }
@@ -130,9 +125,6 @@ export default function SearchTableCard({
     return JSON.stringify(body);
   }
 
-  // ------------------------------
-  // Fetch Data
-  // ------------------------------
   async function fetchData(mode) {
     setLoading(true);
     try {
@@ -146,7 +138,6 @@ export default function SearchTableCard({
       }
       const result = await response.json();
       const fetchedData = Array.isArray(result.data) ? result.data : [];
-      // Sort by dateDeposited (or dateApproved) descending (newest first)
       const sortedData = fetchedData.sort(
         (a, b) =>
           new Date(b.dateDeposited || b.dateApproved) -
@@ -162,9 +153,6 @@ export default function SearchTableCard({
     }
   }
 
-  // ------------------------------
-  // On mount: use testData if in testMode; otherwise, fetch Populate
-  // ------------------------------
   useEffect(() => {
     if (testMode && testData && Array.isArray(testData.data)) {
       const sortedTestData = [...testData.data].sort(
@@ -180,10 +168,6 @@ export default function SearchTableCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testMode, testData]);
 
-  // ------------------------------
-  // Handle "Search" Button
-  // ------------------------------
-  // Update the handleSearch function inside searchtablecard.jsx
   function handleSearch() {
     if (testMode && testData && Array.isArray(testData.data)) {
       // Local filtering using testData
@@ -240,39 +224,19 @@ export default function SearchTableCard({
     }
   }
 
-  // Auto-fetch Populate when search field is cleared
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      if (testMode && testData && Array.isArray(testData.data)) {
-        // In test mode, sort testData by newest date and update state
-        const sortedTestData = [...testData.data].sort(
-          (a, b) =>
-            new Date(b.dateDeposited || b.dateApproved) -
-            new Date(a.dateDeposited || a.dateApproved)
-        );
-        setData(sortedTestData);
-        setAvailableYears(testData.years || []);
-        setCurrentPage(1);
-      } else {
-        // In normal mode, fetch populated data from the server
-        fetchData("Populate");
-      }
+    if (!searchTerm.trim() && !testMode) {
+      fetchData("Populate");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
-  // ------------------------------
-  // Handle "Apply Filter" in Popup
-  // ------------------------------
   function handleApplyFilter() {
     setFilterOpen(false);
     setCurrentPage(1);
     fetchData(getMode());
   }
 
-  // ------------------------------
-  // Pagination Logic
-  // ------------------------------
   const totalItems = data.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -283,12 +247,13 @@ export default function SearchTableCard({
     setCurrentPage(page);
   }
 
-  // ------------------------------
-  // Row Actions (View)
-  // ------------------------------
   function handleView(rowData) {
     setSelectedRow(rowData);
     setShowViewModal(true);
+  }
+
+  function refreshData() {
+    fetchData("Populate");
   }
 
   // ------------------------------
@@ -316,8 +281,7 @@ export default function SearchTableCard({
         <CreateModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          fetchUrl={fetchUrl}
-          userData={userData}
+          refreshData={refreshData} // Added refresh callback
         />
       )}
 
@@ -326,12 +290,10 @@ export default function SearchTableCard({
         <ViewModal
           isOpen={showViewModal}
           onClose={() => setShowViewModal(false)}
-          fetchUrl={fetchUrl}
-          userData={userData}
-          rowData={selectedRow}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
+          refreshData={refreshData}
         />
       )}
 
@@ -345,7 +307,10 @@ export default function SearchTableCard({
           >
             {tableConfig.createButton?.iconUrl ? (
               <img
-                src={tableConfig.createButton.iconUrl}
+                src={
+                  icons[tableConfig.createButton.iconUrl] ||
+                  tableConfig.createButton.iconUrl
+                }
                 alt="create icon"
                 width="20"
               />
@@ -381,7 +346,7 @@ export default function SearchTableCard({
               <Input
                 type="text"
                 placeholder="Search"
-                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 sm:w-100 ${
+                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 sm:w-100 border border-gray-400 ${
                   isCollapsed ? "md:w-90 lg:w-120" : "md:w-45 lg:w-100"
                 } h-7`}
                 value={searchTerm}
@@ -472,7 +437,7 @@ export default function SearchTableCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.5 }}
-              className="space-y-2 mt-2 h-113 md:h-117"
+              className={`space-y-2 mt-2 ${cardSize}`}
             >
               {currentItems.map((rowData, rowIndex) => (
                 <div
@@ -499,7 +464,7 @@ export default function SearchTableCard({
                         >
                           {col.iconUrl ? (
                             <img
-                              src={col.iconUrl}
+                              src={icons[col.iconUrl] || col.iconUrl}
                               alt="icon"
                               className="w-6 h-6"
                             />
@@ -559,25 +524,25 @@ export default function SearchTableCard({
 
         {/* For screens smaller than sm: single-column layout */}
         <div className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}>
-          {!loading && currentItems.length > 0 && (
+          {!loading && data.length > 0 && (
             <motion.div
               initial={{ opacity: 0.5, x: -4 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.5 }}
-              className="space-y-2 mt-2"
+              className="space-y-2 mt-2 overflow-y-auto h-120"
             >
-              {currentItems.map((rowData, rowIndex) => {
+              {data.map((rowData, rowIndex) => {
                 // For mobile, we combine all data columns where col.mobile is true.
                 const combinedData = tableConfig.columns
                   .filter((col) => col.type === "data" && col.mobile)
                   .map(
                     (col) =>
-                      `<strong>${col.header}</strong>: ${
-                        rowData[col.name] ?? "N/A"
-                      }`
+                      `<h1 className="overflow-hidden text-ellipsis"><strong>${
+                        col.header
+                      }</strong>: ${rowData[col.name] ?? "N/A"}</h1>`
                   )
-                  .join("\n");
+                  .join("");
                 return (
                   <div
                     key={rowIndex}
@@ -604,9 +569,9 @@ export default function SearchTableCard({
                       </div>
                     )}
                     <div className="flex-1 whitespace-pre-line py-2">
-                      <h1 className="text-sm md:text-base">
+                      <div className="text-sm md:text-base overflow-hidden truncate">
                         {Parser(combinedData)}
-                      </h1>
+                      </div>
                     </div>
                   </div>
                 );
@@ -627,78 +592,80 @@ export default function SearchTableCard({
           </motion.div>
         )}
 
-        {!loading && data.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0.1, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 2 }}
-            transition={{ duration: 0.75 }}
-            className="mt-4 font-[inter]"
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                Showing {startIndex + 1} to{" "}
-                {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
-                {totalItems} entries
-              </p>
-              <div className="flex space-x-2 items-center">
-                <Button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  className={`px-1.5 py-0.5 ${
-                    isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
-                  } rounded-l-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
-                >
-                  <span
-                    className={`hidden ${
-                      isCollapsed ? "md:block" : "lg:block"
+        {!loading &&
+          data.length > 0 &&
+          windowWidth >= (isCollapsed ? 768 : 640) && (
+            <motion.div
+              initial={{ opacity: 0.1, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 2 }}
+              transition={{ duration: 0.75 }}
+              className="mt-4 font-[inter]"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Showing {startIndex + 1} to{" "}
+                  {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
+                  {totalItems} entries
+                </p>
+                <div className="flex space-x-2 items-center">
+                  <Button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className={`px-1.5 py-0.5 ${
+                      isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
+                    } rounded-l-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
+                  >
+                    <span
+                      className={`hidden ${
+                        isCollapsed ? "md:block" : "lg:block"
+                      }`}
+                    >
+                      Previous
+                    </span>
+                    <img
+                      src={prevIcon}
+                      width="20"
+                      className={`block ${
+                        isCollapsed ? "md:hidden" : "lg:hidden"
+                      }`}
+                      alt="prev icon"
+                    />
+                  </Button>
+                  <h1
+                    className={`font-semibold text-base bg-[#DEE1E6] w-8 text-center ${
+                      isCollapsed
+                        ? "md:text-base md:h-7 md:p-0.5"
+                        : "lg:text-base lg:h-7 lg:p-0.5"
                     }`}
                   >
-                    Previous
-                  </span>
-                  <img
-                    src={prevIcon}
-                    width="20"
-                    className={`block ${
-                      isCollapsed ? "md:hidden" : "lg:hidden"
-                    }`}
-                    alt="prev icon"
-                  />
-                </Button>
-                <h1
-                  className={`font-semibold text-base bg-[#DEE1E6] w-8 text-center ${
-                    isCollapsed
-                      ? "md:text-base md:h-7 md:p-0.5"
-                      : "lg:text-base lg:h-7 lg:p-0.5"
-                  }`}
-                >
-                  {currentPage}
-                </h1>
-                <Button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  className={`px-1.5 py-0.5 ${
-                    isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
-                  } rounded-r-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
-                >
-                  <span
-                    className={`hidden ${
-                      isCollapsed ? "md:block" : "lg:block"
-                    }`}
+                    {currentPage}
+                  </h1>
+                  <Button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className={`px-1.5 py-0.5 ${
+                      isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
+                    } rounded-r-md text-sm bg-[#DEE1E6] transition-all duration-150 hover:bg-gray-400 cursor-pointer transform hover:scale-105`}
                   >
-                    Next
-                  </span>
-                  <img
-                    src={nextIcon}
-                    width="20"
-                    className={`block ${
-                      isCollapsed ? "md:hidden" : "lg:hidden"
-                    }`}
-                    alt="next icon"
-                  />
-                </Button>
+                    <span
+                      className={`hidden ${
+                        isCollapsed ? "md:block" : "lg:block"
+                      }`}
+                    >
+                      Next
+                    </span>
+                    <img
+                      src={nextIcon}
+                      width="20"
+                      className={`block ${
+                        isCollapsed ? "md:hidden" : "lg:hidden"
+                      }`}
+                      alt="next icon"
+                    />
+                  </Button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
       </div>
     </div>
   );
@@ -740,4 +707,5 @@ SearchTableCard.propTypes = {
       PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     ),
   }),
+  cardSize: PropTypes.string,
 };

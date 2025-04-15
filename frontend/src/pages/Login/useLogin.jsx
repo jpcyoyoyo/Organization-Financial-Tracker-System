@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { IpContext } from "../../context/IpContext";
 
 export function useLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [redirect, setRedirect] = useState(false); // Return this to handle navigation in the component
+  const ip = useContext(IpContext);
 
   const login = async (data, reset) => {
     setLoading(true);
@@ -17,7 +19,7 @@ export function useLogin() {
         password: data.password.trim(),
       };
 
-      const response = await fetch("http://192.168.100.21:8081/login", {
+      const response = await fetch(`${ip}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sanitizedData),

@@ -2,6 +2,8 @@ import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/MainContent";
 import SearchTableCard from "../../components/ui/SearchTableCard";
 import ViewDepositModal from "./ViewDepositModal";
+import { useContext } from "react";
+import { IpContext } from "../../context/IpContext";
 
 const tableConfig = {
   createButton: { iconUrl: "src/assets/react.svg", name: "Deposit" },
@@ -25,7 +27,7 @@ const tableConfig = {
       alignment: "justify-center",
       text_size: "text-sm md:text-base",
       mobile: true,
-      name: "dateDeposited",
+      name: "date",
     },
     {
       type: "data",
@@ -35,7 +37,7 @@ const tableConfig = {
       alignment: "justify-center",
       mobile: false,
       text_size: "text-sm md:text-base",
-      name: "source",
+      name: "category",
     },
     { type: "hidden", name: "id" },
     { type: "action", name: "View", iconUrl: "src/assets/react.svg" },
@@ -47,6 +49,7 @@ const itemsPerPage = 7;
 
 export default function Deposits() {
   const { isCollapsed } = useOutletContext();
+  const ip = useContext(IpContext);
 
   const testData = {
     data: [
@@ -73,10 +76,10 @@ export default function Deposits() {
         cardName="DEPOSIT RECORDS"
         userData={userData}
         tableConfig={tableConfig}
-        fetchUrl="http://your-api.com/deposits"
+        fetchUrl={`${ip}/fetch-deposits`}
         isCollapsed={isCollapsed}
         viewModal={ViewDepositModal}
-        testMode={true}
+        testMode={false}
         testData={testData}
         itemsPerPage={itemsPerPage}
       />

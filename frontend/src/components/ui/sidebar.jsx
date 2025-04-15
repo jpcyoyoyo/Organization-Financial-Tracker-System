@@ -4,6 +4,7 @@ import configData from "../../data/sidebarConfig.json";
 import Logo from "../../components/ui/logo";
 import ProfilePic from "../../components/ui/profilepic";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { icons } from "../../assets/icons";
 
 const getSidebarConfig = (designation) => {
   const topLevelTabs = configData.topLevelTabs;
@@ -76,9 +77,18 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
   // Immediately collapse sidebar on mobile before paint
   useLayoutEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setIsCollapsed(true);
-    }
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsCollapsed(true);
+      } else {
+        setIsCollapsed(false);
+      }
+    };
+
+    // Set initial state
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [setIsCollapsed]);
 
   const config = getSidebarConfig(userData.designation || "Member");
@@ -142,7 +152,9 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed ? "hidden md:flex" : "flex"
             } items-center space-x-2`}
           >
-            <ProfilePic profilePic={userData.profile_pic} />
+            <ProfilePic
+              profilePic={icons[userData.profile_pic] || userData.profile_pic}
+            />
             {!isCollapsed && (
               <div className="pl-2 w-40">
                 <p className="text-sm font-bold">{userData.full_name}</p>
@@ -175,7 +187,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                     to={tab.path}
                     onClick={handleNavClick}
                     className={({ isActive }) =>
-                      `relative z-10 flex place-items-center px-2 py-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
+                      `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
                         isCollapsed ? "justify-center" : ""
                       } ${
                         isActive
@@ -184,7 +196,11 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                       }`
                     }
                   >
-                    <img src={tab.icon} alt={tab.label} className="w-6 h-6" />
+                    <img
+                      src={icons[tab.icon] || tab.icon}
+                      alt={tab.label}
+                      className="w-6 h-6"
+                    />
                     {!isCollapsed && (
                       <span className="transition-opacity duration-300 ml-3">
                         {tab.label}
@@ -210,7 +226,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                         to={tab.path}
                         onClick={handleNavClick}
                         className={({ isActive }) =>
-                          `relative z-10 flex items-center px-1.5 md:px-2 py-1.5 md:py-2  rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 ${
+                          `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
                             isCollapsed ? "justify-center" : ""
                           } ${
                             isActive
@@ -220,7 +236,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                         }
                       >
                         <img
-                          src={tab.icon}
+                          src={icons[tab.icon] || tab.icon}
                           alt={tab.label}
                           className="w-6 h-6"
                         />

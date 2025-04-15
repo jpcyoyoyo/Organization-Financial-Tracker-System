@@ -1,12 +1,14 @@
-import { Helmet } from "react-helmet-async";
+import { useOutletContext } from "react-router-dom";
+import MainContent from "../../components/ui/MainContent";
 
 export default function AnnouncementRequests() {
+  const { isCollapsed } = useOutletContext();
+
   return (
-    <div className="p-4">
-      <Helmet>
-        <title>Announcement Requests - Organization Financial Tracker</title>
-      </Helmet>
-      <h1 className="text-5xl font-bold mt-2 ml-6">ANNOUNCEMENT REQUESTS</h1>
-    </div>
+    <MainContent
+      titletab="Announcement Requests - Organization Financial Tracker"
+      contentName="ANNOUUMENT REQUESTS"
+      textFormat="text-3xl pt-1"
+    ></MainContent>
   );
 }

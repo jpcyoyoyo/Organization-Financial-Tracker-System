@@ -10,7 +10,11 @@ export default function MainContent({
   textFormat,
 }) {
   return (
-    <div className="px-3 pt-3 md:px-4 md:pt-4 transition-all">
+    <div
+      className={`px-3 pt-3 md:px-4 ${
+        !showContentNameMobileOnly ? "md:pt-4" : "md:pt-0"
+      } transition-all`}
+    >
       <Helmet>
         <title>{titletab}</title>
       </Helmet>
@@ -30,10 +34,10 @@ export default function MainContent({
         </h1>
 
         <div
-          className={`overflow-auto h-[calc(100vh-92px)] pb-3 md:pb-4 ${
+          className={`overflow-auto h-[calc(100vh-92px)] py-3 md:py-4 ${
             showContentNameMobileOnly
-              ? "mt-3 md:h-[calc(100vh-16px)]"
-              : "mt-0 md:h-[calc(100vh-88px)]"
+              ? "mt-0 md:h-[calc(100vh)]"
+              : "mt-4 md:h-[calc(100vh-86px)]"
           }`}
         >
           {children}

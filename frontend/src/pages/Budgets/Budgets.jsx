@@ -1,12 +1,14 @@
 import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/MainContent";
 import SearchListCard from "../../components/ui/SearchListCard";
+import ViewBudgetModal from "./ViewBudgetModal";
 
 export default function Budgets() {
   const { isCollapsed } = useOutletContext();
 
   const listConfig = {
     columns: [
+      { type: "hidden", name: "id" },
       { type: "icon", iconUrl: "/assets/icon.png" },
       {
         type: "double",
@@ -30,31 +32,37 @@ export default function Budgets() {
   const testData = {
     data: [
       {
+        id: 1,
         budgetName: "Test Budget 1",
         totalBudget: "$1,000",
         dateApproved: "2021-01-01",
       },
       {
+        id: 2,
         budgetName: "Test Budget 2",
         totalBudget: "$2,000",
         dateApproved: "2021-02-01",
       },
       {
+        id: 3,
         budgetName: "Test Budget 3",
         totalBudget: "$1,000",
         dateApproved: "2021-03-01",
       },
       {
+        id: 4,
         budgetName: "Test Budget 4",
         totalBudget: "$2,000",
         dateApproved: "2021-04-01",
       },
       {
+        id: 5,
         budgetName: "Test Budget 5",
         totalBudget: "$1,000",
         dateApproved: "2021-05-01",
       },
       {
+        id: 6,
         budgetName: "Test Budget 6",
         totalBudget: "$1,000",
         dateApproved: "2021-06-01",
@@ -77,6 +85,7 @@ export default function Budgets() {
         isCollapsed={isCollapsed}
         testMode={true}
         testData={testData}
+        viewModal={ViewBudgetModal}
       />
     </MainContent>
   );

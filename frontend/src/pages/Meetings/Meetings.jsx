@@ -1,12 +1,14 @@
-import { Helmet } from "react-helmet-async";
+import { useOutletContext } from "react-router-dom";
+import MainContent from "../../components/ui/MainContent";
 
 export default function Meetings() {
+  const { isCollapsed } = useOutletContext();
+
   return (
-    <div className="p-4">
-      <Helmet>
-        <title>Meetings - Organization Financial Tracker</title>
-      </Helmet>
-      <h1 className="text-5xl font-bold mt-2 ml-6">MEETINGS</h1>
-    </div>
+    <MainContent
+      titletab="Meetings - Organization Financial Tracker"
+      contentName="MEETINGS"
+      textFormat="text-3xl pt-1"
+    ></MainContent>
   );
 }

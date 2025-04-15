@@ -69,7 +69,7 @@
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
           { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
         ],
-        "Vice-President": [
+        "Vice President": [
           { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
           { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
           { "path": "/approvals", "label": "Approvals", "icon": "src/assets/react.svg" },
@@ -86,7 +86,7 @@
       },
       "Admin Panel": [
         { "path": "/user-management", "label": "User Management", "icon": "src/assets/react.svg" },
-        { "path": "/account-creation", "label": "Account Creation", "icon": "src/assets/react.svg" },
+        { "path": "/sections", "label": "Sections", "icon": "src/assets/react.svg" },
         { "path": "/logs", "label": "Logs", "icon": "src/assets/react.svg" }
       ],
       "Preferences": [

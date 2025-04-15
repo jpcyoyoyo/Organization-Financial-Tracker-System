@@ -7,6 +7,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
+import IpProvider from "./context/IpProvider";
 import PropTypes from "prop-types";
 import { useEffect, useState } from "react";
 import LoginPage from "./pages/Login/Login";
@@ -43,6 +44,7 @@ import Reciepts from "./pages/Receipts/Receipts";
 import Announcements from "./pages/Announcements/Announcements";
 import Events from "./pages/Events/Events";
 import YourAttendances from "./pages/YourAttendances/YourAttendances";
+import Sections from "./pages/Sections/Sections";
 
 // Import the sidebar configuration (adjust the path as needed)
 import sidebarConfig from "./data/sidebarConfig.json";
@@ -110,301 +112,309 @@ export default function App() {
 
   return (
     <HelmetProvider>
-      <Helmet>
-        <title>Organization Financial Tracker</title>
-        <meta
-          name="description"
-          content="Track your organization's finances efficiently."
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Helmet>
-
-      {isAuthenticated === null ? (
-        <div>Loading...</div>
-      ) : (
-        <Router>
-          <Routes>
-            <Route
-              path="/login"
-              element={
-                isAuthenticated ? (
-                  <Navigate to="/dashboard" replace />
-                ) : (
-                  <LoginPage setIsAuthenticated={setIsAuthenticated} />
-                )
-              }
-            />
-            <Route
-              path="/logout"
-              element={<Logout setIsAuthenticated={setIsAuthenticated} />}
-            />
-
-            {/* Protected Routes */}
-            {isAuthenticated ? (
-              <Route path="/" element={<HomeLayout />}>
-                <Route
-                  index
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Dashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="dashboard"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Dashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="meetings"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Meetings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="announcements"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Announcements />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="events"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Events />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="budgets"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Budgets />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="deposits"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Deposits />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="expenses"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Expenses />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="reports"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Reports />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Settings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="your-payments"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <YourPayments />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="your-collections"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <YourCollections />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="your-attendances"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <YourAttendances />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="planned-budgets"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <PlannedBudgets />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="announcement-requests"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <AnnouncementRequests />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="audit-reports"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <AuditReports />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="financial-statements"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <FinancialStatements />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="organization-properties"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <OrganizationProperties />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="receipts"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Receipts />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="draft-budget"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <DraftBudget />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="draft-payments"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <DraftPayments />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="manage-deposits"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <ManageDeposits />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="manage-expenses"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <ManageExpenses />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="manage-financial-reports"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <ManageFinancialReports />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="approvals"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Approvals />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="user-management"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <UserManagement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="logs"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Logs />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="site-settings"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <SiteSettings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="request-announcement"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <RequestAnnouncement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="manage-meetings"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <ManageMeetings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="organization-docs"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <OrganizationDocuments />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="reciepts"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Reciepts />
-                    </ProtectedRoute>
-                  }
-                />
-              </Route>
-            ) : (
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            )}
-          </Routes>
-        </Router>
-      )}
+      <IpProvider>
+        <Helmet>
+          <title>Organization Financial Tracker</title>
+          <meta
+            name="description"
+            content="Track your organization's finances efficiently."
+          />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </Helmet>
+        {isAuthenticated === null ? (
+          <div>Loading...</div>
+        ) : (
+          <Router>
+            <Routes>
+              <Route
+                path="/login"
+                element={
+                  isAuthenticated ? (
+                    <Navigate to="/dashboard" replace />
+                  ) : (
+                    <LoginPage setIsAuthenticated={setIsAuthenticated} />
+                  )
+                }
+              />
+              <Route
+                path="/logout"
+                element={<Logout setIsAuthenticated={setIsAuthenticated} />}
+              />
+              {/* Protected Routes */}
+              {isAuthenticated ? (
+                <Route path="/" element={<HomeLayout />}>
+                  <Route
+                    index
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="dashboard"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="meetings"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Meetings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="announcements"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Announcements />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="events"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Events />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="budgets"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Budgets />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="deposits"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Deposits />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="expenses"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Expenses />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="reports"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Reports />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Settings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="your-payments"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <YourPayments />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="your-collections"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <YourCollections />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="your-attendances"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <YourAttendances />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="planned-budgets"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <PlannedBudgets />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="announcement-requests"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <AnnouncementRequests />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="audit-reports"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <AuditReports />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="financial-statements"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <FinancialStatements />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="organization-properties"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <OrganizationProperties />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="receipts"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Receipts />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="draft-budget"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <DraftBudget />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="draft-payments"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <DraftPayments />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="manage-deposits"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <ManageDeposits />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="manage-expenses"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <ManageExpenses />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="manage-financial-reports"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <ManageFinancialReports />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="approvals"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Approvals />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="user-management"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <UserManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="logs"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Logs />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="site-settings"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <SiteSettings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="request-announcement"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <RequestAnnouncement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="manage-meetings"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <ManageMeetings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="organization-docs"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <OrganizationDocuments />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="reciepts"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Reciepts />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="sections"
+                    element={
+                      <ProtectedRoute allowedRoutes={allowedRoutes}>
+                        <Sections />
+                      </ProtectedRoute>
+                    }
+                  />
+                </Route>
+              ) : (
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              )}
+            </Routes>
+          </Router>
+        )}
+      </IpProvider>
     </HelmetProvider>
   );
 }
