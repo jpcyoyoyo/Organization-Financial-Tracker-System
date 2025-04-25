@@ -34,6 +34,7 @@ export default function ViewAccountModal({
     async function fetchDetails() {
       if (!id) return;
       setLoading(true);
+      setDetails(null);
       try {
         const response = await fetch(`${ip}/fetch-user-details`, {
           method: "POST",
@@ -42,7 +43,12 @@ export default function ViewAccountModal({
         });
         if (!response.ok) throw new Error("Failed to fetch details");
         const result = await response.json();
-        if (result.status && result.data) {
+        console.log("Fetched user details:", result);
+        if (
+          result.status &&
+          result.data &&
+          Object.keys(result.data).length > 0
+        ) {
           setDetails(result.data);
         }
       } catch (error) {
@@ -68,7 +74,7 @@ export default function ViewAccountModal({
           <div className="p-4 h-full w-full flex items-center justify-center">
             <p>Loading...</p>
           </div>
-        ) : details ? (
+        ) : details && Object.keys(details).length > 0 ? (
           <div className="p-4 h-full w-full">
             <div className="space-y-2 h-9/10 overflow-y-auto text-sm sm:text-base">
               {/* Header Section: Stack vertically on mobile */}
@@ -126,16 +132,16 @@ export default function ViewAccountModal({
                   <div>{details.id}</div>
                 </div>
                 <div>
-                  <label className="block font-semibold">Created At</label>
+                  <label className="block font-semibold">Email</label>
+                  <div>{details.email}</div>
+                </div>
+                <div>
+                  <label className="block font-semibold">Account Created</label>
                   <div>{details.created_at}</div>
                 </div>
                 <div>
-                  <label className="block font-semibold">Updated At</label>
+                  <label className="block font-semibold">Account Updated</label>
                   <div>{details.updated_at}</div>
-                </div>
-                <div>
-                  <label className="block font-semibold">Email</label>
-                  <div>{details.email}</div>
                 </div>
                 <div>
                   <label className="block font-semibold">Password</label>
@@ -160,14 +166,14 @@ export default function ViewAccountModal({
                   <div>{details.servicing_points}</div>
                 </div>
               </div>
-              <div className="block sm:hidden mt-4 sm:mt-0">
+              <div className="block sm:hidden mt-4 sm:mt-0 place-items-center w-full">
                 <img
                   src={
                     icons[details.qr_code] ||
                     icons["src/assets/sample_qrcode.svg"]
                   }
                   alt="QR Code"
-                  className="w-24 h-24 bg-yellow-300 object-cover rounded"
+                  className="w-32 h-32 bg-yellow-300 object-cover rounded"
                 />
               </div>
             </div>
@@ -190,7 +196,7 @@ export default function ViewAccountModal({
                     handleModalClose();
                     setShowDelete(true);
                   }}
-                  className="bg-red-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-red-800 transform hover:scale-105 flex items-center h-8"
+                  className="bg-red-600 hover:bg-red-800 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
                 >
                   <span>Delete</span>
                 </Button>

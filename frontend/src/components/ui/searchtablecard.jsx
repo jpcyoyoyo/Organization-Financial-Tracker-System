@@ -60,10 +60,10 @@ export default function SearchTableCard({
   fetchUrl,
   isCollapsed,
   itemsPerPage = 7,
-  viewModal: ViewModal, // Custom modal component for viewing
-  createModal: CreateModal, // Custom modal component for creating
-  updateModal: UpdateModal, // Custom modal component for updating
-  deleteModal: DeleteModal, // Custom modal component for deleting
+  viewModal: ViewModal,
+  createModal: CreateModal,
+  updateModal: UpdateModal,
+  deleteModal: DeleteModal,
   testMode,
   testData, // { data: [...], years: [...] }
   cardSize = "h-113 md:h-117",
@@ -74,6 +74,7 @@ export default function SearchTableCard({
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState(null);
   const [year, setYear] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -127,6 +128,7 @@ export default function SearchTableCard({
 
   async function fetchData(mode) {
     setLoading(true);
+    setError(null); // reset error state on new fetch
     try {
       const response = await fetch(fetchUrl, {
         method: "POST",
@@ -148,6 +150,7 @@ export default function SearchTableCard({
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -588,7 +591,9 @@ export default function SearchTableCard({
             transition={{ duration: 0.75 }}
             className="mt-2 h-124 md:h-128 flex items-center justify-center"
           >
-            <p className="text-sm text-gray-600">No data found.</p>
+            <p className="text-sm text-gray-600">
+              {error ? error : "No record found."}
+            </p>
           </motion.div>
         )}
 

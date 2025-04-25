@@ -1,7 +1,7 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import TableCard from "../../components/ui/TableCard";
-import DataCard from "../../components/ui/DataCard";
+import MainContent from "../../components/ui/maincontent";
+import TableCard from "../../components/ui/tablecard";
+import DataCard from "../../components/ui/datacard";
 import TextCard from "../../components/ui/textcard";
 import { motion } from "framer-motion";
 import { useContext } from "react";
@@ -87,7 +87,46 @@ export default function Dashboard() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -4 }}
           transition={{ duration: 0.5 }}
-        ></motion.div>
+        >
+          <div
+            className={`pt-3 md:pt-4 grid ${
+              isCollapsed
+                ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3"
+                : "sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
+            } w-full gap-x-3 gap-y-3 md:gap-x-4 md:gap-y-4`}
+          >
+            <DataCard
+              title="ONLINE ACCOUNTS"
+              fetchUrl={`${ip}/fetch-online-accounts`}
+              name="online_accounts"
+            />
+            <DataCard
+              title="ONLINE IN MOBILE"
+              fetchUrl={`${ip}/fetch-online-mobile`}
+              name="online_mobile"
+            />
+            <DataCard
+              title="ONLINE IN THE WEB"
+              fetchUrl={`${ip}/fetch-online-web`}
+              name="online_web"
+            />
+            <DataCard
+              title="TOTAL ACCOUNTS"
+              fetchUrl={`${ip}/fetch-total-accounts`}
+              name="total_accounts"
+            />
+            <DataCard
+              title="TOTAL LOGS"
+              fetchUrl={`${ip}/fetch-total-logs`}
+              name="total_logs"
+            />
+            <DataCard
+              title="LOGS TODAY"
+              fetchUrl={`${ip}/fetch-logs-today`}
+              name="logs_today"
+            />
+          </div>
+        </motion.div>
       )}
     </MainContent>
   );

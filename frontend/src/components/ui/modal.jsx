@@ -9,12 +9,17 @@ export default function Modal({
   onClose,
   w = "w-11/12 h-11/12 md:h-6/7 md:w-4/7",
   children,
+  modalCenter = false,
 }) {
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 bg-[#171A1FDD] z-50 flex md:pt-7 items-center md:items-start justify-center"
+      className={`fixed inset-0 bg-[#171A1FDD] z-50 flex ${
+        modalCenter ? "md:pb-14" : "md:pt-7"
+      } items-center ${
+        modalCenter ? "md:items-center" : "md:items-start"
+      } justify-center`}
       onClick={onClose}
     >
       {/* Animated container */}
@@ -52,4 +57,5 @@ Modal.propTypes = {
   onClose: PropTypes.func.isRequired,
   children: PropTypes.node,
   w: PropTypes.string,
+  modalCenter: PropTypes.bool,
 };

@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
+import MainContent from "../../components/ui/maincontent";
 import AdminTableCard from "../../components/ui/admintablecard";
 import ViewAccountModal from "./ViewAccountModal";
 import CreateAccountModal from "./CreateAccountModal";
@@ -14,7 +14,7 @@ const tableConfig = {
     { type: "icon", iconUrl: "src/assets/react.svg" },
     {
       type: "data",
-      header: "STUDENT ID",
+      header: "ID",
       w_expand: "w-7/15 lg:w-1/7",
       w_collapse: "w-2/5 sm:w-2/5 md:w-2/6 lg:w-1/7",
       alignment: "justify-start",
@@ -33,7 +33,7 @@ const tableConfig = {
       name: "full_name",
     },
     {
-      type: "status",
+      type: "login-status",
       header: "LOGIN STATUS",
       w_expand: "w-7/15 lg:w-2/7",
       w_collapse: "md:w-2/6 lg:w-2/7",

@@ -39,7 +39,9 @@ export default function CreateAccountModal({
   useEffect(() => {
     async function fetchSections() {
       try {
-        const res = await fetch(`${ip}/fetch-sections`, { method: "GET" });
+        const res = await fetch(`${ip}/fetch-section-options`, {
+          method: "POST",
+        });
         const result = await res.json();
         if (result.status && result.data) {
           setSections(result.data);
@@ -196,7 +198,18 @@ export default function CreateAccountModal({
                 value={sectionId}
                 onChange={(e) => setSectionId(e.target.value)}
               >
-                <option value="">Select Section</option>
+                {sections.length === 0 && (
+                  <option value="" disabled>
+                    No sections available - Create a section first
+                  </option>
+                )}
+
+                {sections.length > 0 && (
+                  <option value="" disabled>
+                    Select section
+                  </option>
+                )}
+
                 {sections.map((section) => (
                   <option key={section.id} value={section.id}>
                     {section.name}

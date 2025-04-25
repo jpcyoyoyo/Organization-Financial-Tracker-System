@@ -3,7 +3,7 @@ import Modal from "../../components/ui/modal";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
-import NotificationPopup from "../../components/ui/NotificationPopup";
+import NotificationPopup from "../../components/ui/notificationpopup";
 
 export default function DeleteAccountModal({
   isOpen,
@@ -64,13 +64,13 @@ export default function DeleteAccountModal({
           <div className="flex justify-end mt-10 space-x-2 sm:space-x-4 h-1/2">
             <Button
               onClick={onClose}
-              className="bg-gray-400 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-red-800 transform hover:scale-105 flex items-center h-8"
+              className="bg-gray-400 hover:bg-gray-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
             >
               Cancel
             </Button>
             <Button
               onClick={handleDeleteAccount}
-              className="bg-red-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-red-800 transform hover:scale-105 flex items-center h-8"
+              className="bg-red-600 hover:bg-red-800 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
               disabled={loading}
             >
               {loading ? "Deleting..." : "Delete"}

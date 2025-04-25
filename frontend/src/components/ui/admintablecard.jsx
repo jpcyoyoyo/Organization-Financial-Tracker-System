@@ -31,6 +31,7 @@ export default function AdminTableCard({
   // ------------------------------
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [year, setYear] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -47,6 +48,8 @@ export default function AdminTableCard({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
+
+  const newCardSize = "md:h-" + String(parseInt(cardSize.substring(2, 5)) + 80);
 
   // Update window width on resize
   useEffect(() => {
@@ -85,6 +88,7 @@ export default function AdminTableCard({
 
   async function fetchData(mode) {
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(fetchUrl, {
         method: "POST",
@@ -106,6 +110,7 @@ export default function AdminTableCard({
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -234,8 +239,6 @@ export default function AdminTableCard({
         <CreateModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          fetchUrl={fetchUrl}
-          userData={userData}
           refreshData={refreshData} // Added refresh callback
         />
       )}
@@ -244,9 +247,6 @@ export default function AdminTableCard({
         <ViewModal
           isOpen={showViewModal}
           onClose={() => setShowViewModal(false)}
-          fetchUrl={fetchUrl}
-          userData={userData}
-          rowData={selectedRow}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
@@ -352,7 +352,11 @@ export default function AdminTableCard({
                 </div>
               );
             }
-            if (col.type === "data" || col.type === "status") {
+            if (
+              col.type === "data" ||
+              col.type === "login-status" ||
+              col.type === "log-status"
+            ) {
               return (
                 <div
                   key={index}
@@ -388,151 +392,208 @@ export default function AdminTableCard({
 
         {/* Standard layout for sm and above */}
         <div className={`hidden ${isCollapsed ? "md:block" : "lg:block"}`}>
-          {!loading && currentItems.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0.5, x: -4 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 2 }}
-              transition={{ duration: 0.5 }}
-              className={`space-y-1 mt-2 ${cardSize}`}
-            >
-              {currentItems.map((rowData, rowIndex) => (
-                <div
-                  key={rowIndex}
-                  className="flex flex-row flex-nowrap bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm transition-all md:hover:-translate-y-0.5 cursor-pointer"
-                >
-                  {tableConfig.columns.map((col, colIndex) => {
-                    if (col.type === "hidden") {
-                      return (
-                        <input
-                          key={colIndex}
-                          type="hidden"
-                          name={col.name}
-                          value={rowData[col.name] || ""}
-                          readOnly
-                        />
-                      );
-                    }
-                    if (col.type === "icon") {
-                      return (
-                        <div
-                          key={colIndex}
-                          className="bg-red-600 w-16 flex items-center justify-center text-white rounded-l-lg"
-                        >
-                          {col.iconUrl ? (
-                            <img
-                              src={col.iconUrl}
-                              alt="icon"
-                              className="w-6 h-6 inline-block"
-                            />
-                          ) : (
-                            <span className="text-xs font-bold">ICON</span>
-                          )}
-                        </div>
-                      );
-                    }
-                    if (col.type === "data") {
-                      return (
-                        <div
-                          key={colIndex}
-                          className={`px-2 py-1.5 ${
-                            isCollapsed ? col.w_collapse : col.w_expand
-                          } items-center justify-center`}
-                        >
-                          <h1 className="text-sm md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
-                            {rowData[col.name] ?? "N/A"}
-                          </h1>
-                        </div>
-                      );
-                    }
-                    if (col.type === "status") {
-                      return (
-                        <div
-                          key={colIndex}
-                          className={`px-2 py-1.5 flex items-center justify-center ${
-                            isCollapsed ? col.w_collapse : col.w_expand
-                          }`}
-                        >
-                          <h1 className="text-sm font-bold md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
-                            {rowData[col.name] === 1 ? (
-                              <span className="text-green-600">Online</span>
-                            ) : (
-                              <span className="text-red-600">Offline</span>
-                            )}
-                          </h1>
-                        </div>
-                      );
-                    }
-                    if (col.type === "action") {
-                      if (!ViewModal) return null;
-                      return (
-                        <div
-                          key={colIndex}
-                          className="text-center w-16 md:w-30 flex items-center justify-center"
-                        >
-                          <Button
-                            className="text-blue-600 underline hover:no-underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleView(rowData);
-                            }}
+          <motion.div
+            initial={{ opacity: 0.5, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 2 }}
+            transition={{ duration: 0.5 }}
+            className={`space-y-1 mt-2 ${
+              !loading && data.length === 0 ? "h-0" : cardSize
+            }`}
+          >
+            {currentItems.map(
+              (rowData, rowIndex) =>
+                !loading &&
+                currentItems.length > 0 && (
+                  <div
+                    key={rowIndex}
+                    className="flex flex-row flex-nowrap bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm transition-all md:hover:-translate-y-0.5"
+                  >
+                    {tableConfig.columns.map((col, colIndex) => {
+                      if (col.type === "hidden") {
+                        return (
+                          <input
+                            key={colIndex}
+                            type="hidden"
+                            name={col.name}
+                            value={rowData[col.name] || ""}
+                            readOnly
+                          />
+                        );
+                      }
+                      if (col.type === "icon") {
+                        return (
+                          <div
+                            key={colIndex}
+                            className="bg-red-600 w-16 flex items-center justify-center text-white rounded-l-lg"
                           >
-                            {col.name || "View"}
-                          </Button>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-              ))}
-            </motion.div>
-          )}
+                            {col.iconUrl ? (
+                              <img
+                                src={col.iconUrl}
+                                alt="icon"
+                                className="w-6 h-6 inline-block"
+                              />
+                            ) : (
+                              <span className="text-xs font-bold">ICON</span>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (col.type === "data") {
+                        return (
+                          <div
+                            key={colIndex}
+                            className={`px-2 py-1.5 ${
+                              isCollapsed ? col.w_collapse : col.w_expand
+                            } items-center justify-center`}
+                          >
+                            <h1 className="text-sm md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
+                              {rowData[col.name] ?? col.default}
+                            </h1>
+                          </div>
+                        );
+                      }
+                      if (col.type === "login-status") {
+                        return (
+                          <div
+                            key={colIndex}
+                            className={`px-2 py-1.5 flex items-center justify-center ${
+                              isCollapsed ? col.w_collapse : col.w_expand
+                            }`}
+                          >
+                            <h1 className="text-sm font-bold md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
+                              {rowData[col.name] === 1 ? (
+                                <span className="text-green-600">Online</span>
+                              ) : (
+                                <span className="text-red-600">Offline</span>
+                              )}
+                            </h1>
+                          </div>
+                        );
+                      }
+                      if (col.type === "log-status") {
+                        return (
+                          <div
+                            key={colIndex}
+                            className={`px-2 py-1.5 flex items-center ${
+                              col.alignment
+                            } ${isCollapsed ? col.w_collapse : col.w_expand}`}
+                          >
+                            <h1
+                              className={`text-sm font-bold md:text-base ${
+                                col.text_alingment
+                                  ? col.text_alingment
+                                  : "text-center"
+                              } overflow-hidden whitespace-nowrap overflow-ellipsis`}
+                            >
+                              {rowData[col.name] === "0" ? (
+                                <span className="text-green-600">
+                                  {rowData[col.name_2]}
+                                </span>
+                              ) : rowData[col.name] === "1" ? (
+                                <span className="text-red-600">
+                                  {rowData[col.name_2]}
+                                </span>
+                              ) : (
+                                <span className="text-cyan-400">
+                                  {rowData[col.name_2]}
+                                </span>
+                              )}
+                            </h1>
+                          </div>
+                        );
+                      }
+                      if (col.type === "action") {
+                        if (!ViewModal) return null;
+                        return (
+                          <div
+                            key={colIndex}
+                            className="text-center w-16 md:w-30 flex items-center justify-center"
+                          >
+                            <Button
+                              className="text-blue-600 underline hover:no-underline cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleView(rowData);
+                              }}
+                            >
+                              {col.name || "View"}
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
+                )
+            )}
+          </motion.div>
         </div>
 
         {/* For screens smaller than sm: single-column layout */}
         <div className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}>
-          {!loading && data.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0.5, x: -4 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 2 }}
-              transition={{ duration: 0.5 }}
-              className="space-y-2 mt-2 overflow-y-auto h-120"
-            >
-              {data.map((rowData, rowIndex) => {
-                const combinedData = tableConfig.columns
-                  .filter(
-                    (col) =>
-                      (col.type === "data" || col.type === "status") &&
-                      col.mobile
-                  )
-                  .map((col) => {
-                    if (col.type === "status") {
-                      return `<h1 class="overflow-hidden text-ellipsis">
-                        <strong>${col.header}</strong>: ${
-                        rowData[col.name] === 1 || rowData[col.name] === "1"
-                          ? '<span class="text-green-600 font-bold">Online</span>'
-                          : '<span class="text-red-600 font-bold">Offline</span>'
-                      }
-                      </h1>`;
-                    } else {
-                      return `<h1 class="overflow-hidden text-ellipsis">
-                        <strong>${col.header}</strong>: ${
-                        rowData[col.name] ?? "N/A"
-                      }
-                      </h1>`;
+          <motion.div
+            initial={{ opacity: 0.5, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 2 }}
+            transition={{ duration: 0.5 }}
+            className={`space-y-2 mt-2 overflow-y-auto ${
+              !loading && data.length === 0 ? "h-0" : "h-120"
+            }`}
+          >
+            {data.map((rowData, rowIndex) => {
+              const combinedData = tableConfig.columns
+                .filter(
+                  (col) =>
+                    (col.type === "data" ||
+                      col.type === "login-status" ||
+                      col.type === "log-status") &&
+                    col.mobile
+                )
+                .map((col) => {
+                  if (col.type === "login-status") {
+                    return `<h1 class="overflow-hidden text-ellipsis">
+                      <strong>${col.header}</strong>: ${
+                      rowData[col.name] === 1 || rowData[col.name] === "1"
+                        ? '<span class="text-green-600 font-bold">Online</span>'
+                        : '<span class="text-red-600 font-bold">Offline</span>'
                     }
-                  })
-                  .join("");
-                return (
+                    </h1>`;
+                  } else if (col.type === "log-status") {
+                    return `<h1 class="overflow-hidden text-ellipsis">
+                        <strong>${col.header}</strong>: ${
+                      rowData[col.name] === "0"
+                        ? `<span className="text-green-600 font-bold">${
+                            rowData[col.name_2]
+                          }</span>`
+                        : rowData[col.name] === "1"
+                        ? `<span className="text-red-600 font-bold">${
+                            rowData[col.name_2]
+                          }</span>`
+                        : `<span className="text-cyan-400 font-bold">${
+                            rowData[col.name_2]
+                          }</span>`
+                    }
+                    </h1>`;
+                  } else {
+                    return `<h1 class="overflow-hidden text-ellipsis">
+                        <strong>${col.header}</strong>: ${
+                      rowData[col.name] ?? col.default
+                    }
+                      </h1>`;
+                  }
+                })
+                .join("");
+              return (
+                !loading &&
+                data.length > 0 && (
                   <div
                     key={rowIndex}
                     className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all cursor-pointer"
                     onClick={() => handleView(rowData)}
                   >
                     {tableConfig.columns.find((col) => col.type === "icon") && (
-                      <div className="bg-red-600 w-16 flex items-center justify-center text-white mr-2">
+                      <div className="bg-red-600 w-12 flex items-center justify-center text-white mr-2">
                         {tableConfig.columns.find((col) => col.type === "icon")
                           .iconUrl ? (
                           <img
@@ -550,15 +611,15 @@ export default function AdminTableCard({
                       </div>
                     )}
                     <div className="flex-1 whitespace-pre-line py-2">
-                      <div className="text-sm md:text-base overflow-hidden truncate">
+                      <div className="text-xs sm:text-sm md:text-base overflow-hidden truncate">
                         {Parser(combinedData)}
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </motion.div>
-          )}
+                )
+              );
+            })}
+          </motion.div>
         </div>
 
         {!loading && data.length === 0 && (
@@ -567,9 +628,13 @@ export default function AdminTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.75 }}
-            className="h-107.5 md:h-112 flex items-center justify-center"
+            className={`h-110 ${
+              newCardSize ? newCardSize : "md:h-120"
+            } flex items-center justify-center`}
           >
-            <p className="text-sm text-gray-600">No data found.</p>
+            <p className="text-sm text-gray-600">
+              {error ? error : "No record found."}
+            </p>
           </motion.div>
         )}
 
@@ -665,16 +730,25 @@ AdminTableCard.propTypes = {
     }),
     columns: PropTypes.arrayOf(
       PropTypes.shape({
-        type: PropTypes.oneOf(["icon", "data", "hidden", "action", "status"])
-          .isRequired,
+        type: PropTypes.oneOf([
+          "icon",
+          "data",
+          "hidden",
+          "action",
+          "login-status",
+          "log-status",
+        ]).isRequired,
         iconUrl: PropTypes.string,
         header: PropTypes.string,
         w_expand: PropTypes.string,
         w_collapse: PropTypes.string,
         alignment: PropTypes.string,
         text_size: PropTypes.string,
+        text_alignment: PropTypes.string,
         mobile: PropTypes.bool,
         name: PropTypes.string,
+        name_2: PropTypes.string,
+        default: PropTypes.string,
       })
     ).isRequired,
   }).isRequired,

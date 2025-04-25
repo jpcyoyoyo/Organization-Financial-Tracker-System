@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, useRef } from "react";
 import Modal from "../../components/ui/modal";
 import PropTypes from "prop-types";
-import NotificationPopup from "../../components/ui/NotificationPopup";
+import NotificationPopup from "../../components/ui/notificationpopup";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { IpContext } from "../../context/IpContext";
@@ -369,7 +369,7 @@ export default function UpdateAccountModal({
           <div className="flex place-self-end items-end h-1/10">
             <Button
               type="submit"
-              className="bg-blue-600 text-white px-4 py-2 rounded h-10 cursor-pointer transition-all duration-150 hover:bg-blue-800 transform hover:scale-105"
+              className="bg-blue-600 hover:bg-blue-800 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
             >
               Update Account
             </Button>

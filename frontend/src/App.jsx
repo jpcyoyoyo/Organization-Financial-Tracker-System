@@ -53,13 +53,20 @@ import sidebarConfig from "./data/sidebarConfig.json";
 function getAllowedRoutes(designation) {
   const allowed = new Set();
 
-  // Add all topLevelTabs routes
   sidebarConfig.topLevelTabs.forEach((tab) => allowed.add(tab.path));
+
+  // If the user is an admin, restrict allowed routes to only those under "Admin Panel"
+  if (designation.toLowerCase() === "admin") {
+    const adminPanel = sidebarConfig.groups["Admin Panel"];
+    if (adminPanel && Array.isArray(adminPanel)) {
+      adminPanel.forEach((item) => allowed.add(item.path));
+    }
+    return Array.from(allowed);
+  }
 
   // Iterate groups
   Object.entries(sidebarConfig.groups).forEach(([groupName, groupData]) => {
     if (groupName === "Your Obligations") {
-      // groupData is an object with keys like "default", "Representative", etc.
       if (groupData[designation]) {
         groupData[designation].forEach((item) => allowed.add(item.path));
       } else if (groupData["default"]) {

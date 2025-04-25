@@ -2,7 +2,7 @@ import { IpContext } from "./IpContext";
 import PropTypes from "prop-types";
 
 const IpProvider = ({ children }) => {
-  const ip = "http://192.168.254.110:8081";
+  const ip = "http://192.168.100.45:8081";
   return <IpContext.Provider value={ip}>{children}</IpContext.Provider>;
 };
 
