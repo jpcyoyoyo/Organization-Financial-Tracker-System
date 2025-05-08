@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchTableCard from "../../components/ui/SearchTableCard";
+import MainContent from "../../components/ui/maincontent";
+import SearchTableCard from "../../components/ui/searchtablecard";
 import ViewExpenseModal from "./ViewExpenseModal";
 import { useContext } from "react";
 import { IpContext } from "../../context/IpContext";
@@ -33,8 +33,8 @@ const tableConfig = {
     {
       type: "data",
       header: "SOURCE",
-      w_expand: "hidden lg:block w-7/15 lg:w-5/14",
-      w_collapse: "hidden md:block md:w-2/6 lg:w-5/14",
+      w_expand: "hidden lg:flex w-7/15 lg:w-5/14",
+      w_collapse: "hidden md:flex md:w-2/6 lg:w-5/14",
       alignment: "justify-center",
       mobile: false,
       text_size: "text-sm md:text-base",

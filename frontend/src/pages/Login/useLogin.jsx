@@ -8,6 +8,21 @@ export function useLogin() {
   const [redirect, setRedirect] = useState(false); // Return this to handle navigation in the component
   const ip = useContext(IpContext);
 
+  const detectPlatform = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+
+    // Check for mobile devices
+    if (/android/i.test(userAgent)) {
+      return "mobile";
+    }
+    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+      return "mobile";
+    }
+
+    // Default to web
+    return "web";
+  };
+
   const login = async (data, reset) => {
     setLoading(true);
     setError(null);
@@ -17,6 +32,7 @@ export function useLogin() {
       const sanitizedData = {
         studentId: data.studentId.trim(),
         password: data.password.trim(),
+        platform: detectPlatform(),
       };
 
       const response = await fetch(`${ip}/login`, {

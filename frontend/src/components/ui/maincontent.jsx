@@ -1,8 +1,9 @@
 import { Helmet } from "react-helmet-async";
 import PropTypes from "prop-types";
 import { motion } from "framer-motion";
+import { memo } from "react";
 
-export default function MainContent({
+function MainContent({
   titletab,
   contentName,
   showContentNameMobileOnly,
@@ -26,7 +27,7 @@ export default function MainContent({
         className="w-full"
       >
         <h1
-          className={`h-12 text-wrap break-words ${textFormat} md:text-5xl font-bold mt-2.5 md:mt-2 mb-5 md:mb-4 ml-16 md:ml-6 ${
+          className={`h-12 ${textFormat} md:text-5xl font-bold mt-2.5 md:mt-2 mb-5 md:mb-4 ml-16 md:ml-6 truncate ${
             showContentNameMobileOnly ? "md:hidden" : "block"
           }`}
         >
@@ -34,9 +35,9 @@ export default function MainContent({
         </h1>
 
         <div
-          className={`overflow-auto h-[calc(100vh-92px)] py-3 md:py-4 ${
+          className={`overflow-auto h-[calc(100vh-92px)] pb-3 md:pb-4 ${
             showContentNameMobileOnly
-              ? "mt-0 md:h-[calc(100vh)]"
+              ? "mt-3 md:h-[calc(100vh)]"
               : "mt-4 md:h-[calc(100vh-86px)]"
           }`}
         >
@@ -54,3 +55,6 @@ MainContent.propTypes = {
   showContentNameMobileOnly: PropTypes.bool,
   textFormat: PropTypes.string,
 };
+
+// Wrap MainContent with React.memo to prevent unnecessary re-renders
+export default memo(MainContent);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button } from "./button";
 import { Input } from "./input";
@@ -8,8 +8,8 @@ import prevIcon from "../../assets/prev.svg";
 import nextIcon from "../../assets/next.svg";
 import { motion } from "framer-motion";
 import FilterPopup from "./filterpopup";
-import Parser from "html-react-parser";
 import { icons } from "../../assets/icons";
+import deepEqual from "fast-deep-equal";
 
 export default function AdminTableCard({
   cardName,
@@ -30,7 +30,8 @@ export default function AdminTableCard({
   // State: Data, Loading, Filters
   // ------------------------------
   const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isNewData, setIsNewData] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [year, setYear] = useState("");
@@ -39,15 +40,18 @@ export default function AdminTableCard({
   const [availableYears, setAvailableYears] = useState([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  // State to track window width for mobile detection
+  const [fetching, setFetching] = useState(true);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-
+  const [mobileItemsCount, setMobileItemsCount] = useState(itemsPerPage * 2); // Double the itemsPerPage for mobile
+  const mobileContainerRef = useRef(null);
   // ------------------------------
   // State: Modals (Create, View, etc.)
   // ------------------------------
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
+
+  const lastDataRef = useRef(null);
 
   const newCardSize = "md:h-" + String(parseInt(cardSize.substring(2, 5)) + 80);
 
@@ -58,63 +62,77 @@ export default function AdminTableCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  function getMode() {
+  const getMode = useCallback(() => {
     const hasSearch = searchTerm.trim().length > 0;
     const hasFilter = year || startDate || endDate;
     if (hasSearch && hasFilter) return "Mixed";
     if (hasSearch) return "Search";
     if (hasFilter) return "Filter";
     return "Populate";
-  }
+  }, [searchTerm, year, startDate, endDate]);
 
-  function buildRequestBody(mode) {
-    let parsedUser = {};
-    try {
-      parsedUser = JSON.parse(userData || "{}");
-    } catch (e) {
-      console.warn("Invalid userData JSON:", e);
-    }
-    const body = { mode, user: parsedUser };
-    if (mode === "Search" || mode === "Mixed") {
+  const requestBody = useMemo(() => {
+    const parsedUser = JSON.parse(userData || "{}");
+    const body = { mode: getMode(), user: parsedUser };
+
+    if (searchTerm.trim()) {
       body.searchTerm = searchTerm;
     }
-    if (mode === "Filter" || mode === "Mixed") {
+    if (year || startDate || endDate) {
       body.year = year;
       body.startDate = startDate;
       body.endDate = endDate;
     }
-    return JSON.stringify(body);
-  }
 
-  async function fetchData(mode) {
-    setLoading(true);
+    return JSON.stringify(body);
+  }, [userData, searchTerm, year, startDate, endDate, getMode]);
+
+  // Fetch function
+  const fetchData = useCallback(async () => {
     setError(null);
     try {
-      const response = await fetch(fetchUrl, {
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: buildRequestBody(mode),
+        body: requestBody,
       });
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
-      }
-      const result = await response.json();
-      const fetchedData = Array.isArray(result.data) ? result.data : [];
-      const sortedData = fetchedData.sort(
-        (a, b) =>
-          new Date(b.dateDeposited || b.dateApproved) -
-          new Date(a.dateDeposited || a.dateApproved)
-      );
-      setData(sortedData);
+      if (!res.ok) throw new Error("Failed to fetch data");
+      const result = await res.json();
+      const raw = Array.isArray(result.data) ? result.data : [];
+      const sorted = raw
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.dateDeposited || b.dateApproved) -
+            new Date(a.dateDeposited || a.dateApproved)
+        );
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
-    } catch (error) {
-      console.error("Error fetching table data:", error);
+      setData(sorted);
+    } catch (e) {
+      console.error(e);
+      setError(e.message);
       setData([]);
-      setError(error.message);
     } finally {
       setLoading(false);
+      setFetching(false);
     }
-  }
+  }, [fetchUrl, requestBody]);
+
+  useEffect(() => {
+    if (
+      getMode() === "Populate" &&
+      !fetching &&
+      lastDataRef.current.length &&
+      !deepEqual(data, lastDataRef.current)
+    ) {
+      setIsNewData(true);
+      setLoading(true);
+      fetchData();
+      console.log("Updating data...");
+      setTimeout(() => setIsNewData(false), 800);
+    }
+    lastDataRef.current = data;
+  }, [data, fetching, getMode, fetchData]);
 
   useEffect(() => {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -126,10 +144,15 @@ export default function AdminTableCard({
       setData(sortedTestData);
       setAvailableYears(testData.years || []);
     } else {
-      fetchData("Populate");
+      if (fetching) {
+        fetchData();
+        if (!data) {
+          setLoading(true);
+        }
+        console.log("Fetching data...");
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testMode, testData]);
+  }, [testMode, testData, fetchData, fetching, data]);
 
   function handleSearch() {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -177,33 +200,40 @@ export default function AdminTableCard({
       setAvailableYears(testData.years || []);
       setCurrentPage(1);
     } else {
-      // Normal behavior
-      if (!searchTerm.trim()) {
-        fetchData("Populate");
-        return;
-      }
       setCurrentPage(1);
-      fetchData(getMode());
+      setLoading(true);
+      setFetching(true);
     }
   }
 
   useEffect(() => {
     if (!searchTerm.trim() && !testMode) {
-      fetchData("Populate");
+      setFetching(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, testMode]);
+
+  function handleResetFilter() {
+    setYear("");
+    setStartDate("");
+    setEndDate("");
+    setFilterOpen(false);
+    setLoading(true);
+    setFetching(true);
+  }
 
   function handleApplyFilter() {
     setFilterOpen(false);
     setCurrentPage(1);
-    fetchData(getMode());
+    setLoading(true);
+    setFetching(true);
   }
 
   const totalItems = data.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentItems = data.slice(startIndex, startIndex + itemsPerPage);
+
+  const mobileItems = data.slice(0, mobileItemsCount);
 
   function handlePageChange(page) {
     if (page < 1 || page > totalPages) return;
@@ -216,8 +246,77 @@ export default function AdminTableCard({
   }
 
   function refreshData() {
-    fetchData("Populate");
+    if (searchTerm.trim()) {
+      setSearchTerm("");
+    }
+
+    setFetching(true);
+    console.log("Refreshing data...");
   }
+
+  const handleLoadMore = useCallback(() => {
+    if (mobileItemsCount < data.length) {
+      setMobileItemsCount((prevCount) =>
+        Math.min(prevCount + itemsPerPage * 2, data.length)
+      );
+    }
+  }, [mobileItemsCount, data.length, itemsPerPage]);
+
+  useEffect(() => {
+    console.log(
+      "[MobileScroll] effect run →",
+      "windowWidth:",
+      windowWidth,
+      "mobileItemsCount:",
+      mobileItemsCount,
+      "data.length:",
+      data.length,
+      "mobileContainerRef",
+      mobileContainerRef.current
+    );
+
+    if (
+      windowWidth < (isCollapsed ? 768 : 1024) &&
+      mobileContainerRef.current
+    ) {
+      const scrollEl = mobileContainerRef.current;
+
+      const onScroll = () => {
+        const { scrollTop, clientHeight, scrollHeight } = scrollEl;
+        console.log("[MobileScroll:onScroll]", {
+          scrollTop,
+          clientHeight,
+          scrollHeight,
+        });
+
+        if (scrollTop + clientHeight >= scrollHeight - 10) {
+          console.log("[MobileScroll] bottom reached → loading more");
+          handleLoadMore();
+        }
+      };
+
+      scrollEl.addEventListener("scroll", onScroll);
+      return () => {
+        console.log("[MobileScroll] cleaning up listener");
+        scrollEl.removeEventListener("scroll", onScroll);
+      };
+    }
+  }, [windowWidth, mobileItemsCount, data.length, handleLoadMore, isCollapsed]);
+
+  const loadingMessage = (() => {
+    if (!loading) return null; // no message if not loading
+    if (isNewData) return "Updating…";
+    switch (getMode()) {
+      case "Mixed":
+        return "Searching records with filter applied…";
+      case "Search":
+        return "Searching records…";
+      case "Filter":
+        return "Filtering records…";
+      default:
+        return "Loading…";
+    }
+  })();
 
   return (
     <div className={`font-[archivo] text-gray-800 relative`}>
@@ -232,6 +331,7 @@ export default function AdminTableCard({
           onEndDateChange={setEndDate}
           onApply={handleApplyFilter}
           onCancel={() => setFilterOpen(false)}
+          onReset={handleResetFilter}
         />
       )}
 
@@ -247,6 +347,7 @@ export default function AdminTableCard({
         <ViewModal
           isOpen={showViewModal}
           onClose={() => setShowViewModal(false)}
+          onGoBack={() => setShowViewModal(true)}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
@@ -294,17 +395,31 @@ export default function AdminTableCard({
         {/* SEARCH & FILTER BAR */}
         <div className="flex items-center justify-end sm:justify-between pb-4 w-full">
           {/* RECORD COUNT (aligned left) */}
-          <div className="hidden sm:block text-sm sm:text-base text-gray-600 pl-2">
+          <div
+            className={`hidden ${
+              isCollapsed ? "md:block" : "lg:block"
+            } text-sm sm:text-base text-gray-600 pl-2`}
+          >
             Total Records: {totalItems}
           </div>
           {/* SEARCH & FILTER (aligned right) */}
-          <div className="transition-all flex space-x-2 justify-between sm:justify-end items-center w-full sm:w-auto">
-            <div className="flex flex-row w-88/100 sm:w-auto">
+          <div
+            className={`transition-all flex space-x-2 justify-between ${
+              isCollapsed
+                ? "md:justify-end md:w-auto"
+                : "lg:justify-end lg:w-auto"
+            } items-center w-full`}
+          >
+            <div
+              className={`flex flex-row w-88/100 ${
+                isCollapsed ? "md:w-auto" : "lg:w-auto"
+              }`}
+            >
               <Input
                 type="text"
                 placeholder="Search"
-                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 sm:w-100 border border-gray-400 ${
-                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-45 lg:w-100"
+                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 border border-gray-400 ${
+                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-150 lg:w-100"
                 } h-7`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -316,14 +431,14 @@ export default function AdminTableCard({
               />
               <Button
                 onClick={handleSearch}
-                className="px-2 py-1 bg-blue-600 w-14/100 sm:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
+                className="px-2 py-1 bg-blue-600 w-14/100 md:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
               >
                 <img src={searchIcon} width="20" alt="search icon" />
               </Button>
             </div>
             <Button
               onClick={() => setFilterOpen(true)}
-              className="w-12/100 sm:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
+              className="w-12/100 md:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
             >
               <img src={filterIcon} width="20" alt="filter icon" />
             </Button>
@@ -340,14 +455,14 @@ export default function AdminTableCard({
             if (col.type === "hidden") return null;
             if (col.type === "icon") {
               return (
-                <div key={index} className="w-16 text-center">
+                <div key={index} className="w-16 text-center flex-none">
                   {/* Blank header for icon column */}
                 </div>
               );
             }
             if (col.type === "action") {
               return (
-                <div key={index} className="text-center w-16 md:w-30">
+                <div key={index} className="text-center w-16 md:w-30 flex-none">
                   {col.header || ""}
                 </div>
               );
@@ -384,9 +499,11 @@ export default function AdminTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 1 }}
-            className="h-120 md:h-112 flex items-center justify-center"
+            className={`h-110 ${
+              newCardSize ? newCardSize : "md:h-120"
+            } flex items-center justify-center`}
           >
-            <p className="text-center py-2">Loading...</p>
+            <p className="text-sm text-gray-600">{loadingMessage}</p>
           </motion.div>
         )}
 
@@ -398,7 +515,7 @@ export default function AdminTableCard({
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.5 }}
             className={`space-y-1 mt-2 ${
-              !loading && data.length === 0 ? "h-0" : cardSize
+              (!loading && data.length === 0) || loading ? "h-0" : cardSize
             }`}
           >
             {currentItems.map(
@@ -425,7 +542,7 @@ export default function AdminTableCard({
                         return (
                           <div
                             key={colIndex}
-                            className="bg-red-600 w-16 flex items-center justify-center text-white rounded-l-lg"
+                            className="bg-red-600 w-16 flex items-center justify-center text-white rounded-l-lg flex-none"
                           >
                             {col.iconUrl ? (
                               <img
@@ -443,11 +560,11 @@ export default function AdminTableCard({
                         return (
                           <div
                             key={colIndex}
-                            className={`px-2 py-1.5 ${
+                            className={`flex px-2 py-1.5 ${
                               isCollapsed ? col.w_collapse : col.w_expand
-                            } items-center justify-center`}
+                            } items-center justify-center `}
                           >
-                            <h1 className="text-sm md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
+                            <h1 className="text-sm md:text-base text-center truncate">
                               {rowData[col.name] ?? col.default}
                             </h1>
                           </div>
@@ -461,7 +578,7 @@ export default function AdminTableCard({
                               isCollapsed ? col.w_collapse : col.w_expand
                             }`}
                           >
-                            <h1 className="text-sm font-bold md:text-base text-center overflow-hidden whitespace-nowrap overflow-ellipsis">
+                            <h1 className="text-sm font-bold md:text-base text-center truncate">
                               {rowData[col.name] === 1 ? (
                                 <span className="text-green-600">Online</span>
                               ) : (
@@ -484,7 +601,7 @@ export default function AdminTableCard({
                                 col.text_alingment
                                   ? col.text_alingment
                                   : "text-center"
-                              } overflow-hidden whitespace-nowrap overflow-ellipsis`}
+                              } truncate`}
                             >
                               {rowData[col.name] === "0" ? (
                                 <span className="text-green-600">
@@ -508,16 +625,21 @@ export default function AdminTableCard({
                         return (
                           <div
                             key={colIndex}
-                            className="text-center w-16 md:w-30 flex items-center justify-center"
+                            className="text-center w-16 md:w-30 flex items-center justify-center flex-none"
                           >
                             <Button
-                              className="text-blue-600 underline hover:no-underline cursor-pointer"
+                              className="text-black cursor-pointer flex flex-row"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleView(rowData);
                               }}
                             >
-                              {col.name || "View"}
+                              <img
+                                src={col.iconUrl}
+                                alt="create icon"
+                                width="18"
+                              />
+                              <h1 className="ml-1">{col.name || "View"}</h1>
                             </Button>
                           </div>
                         );
@@ -533,16 +655,20 @@ export default function AdminTableCard({
         {/* For screens smaller than sm: single-column layout */}
         <div className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}>
           <motion.div
+            ref={mobileContainerRef}
             initial={{ opacity: 0.5, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.5 }}
-            className={`space-y-2 mt-2 overflow-y-auto ${
+            className={`space-y-2 overflow-y-auto ${
               !loading && data.length === 0 ? "h-0" : "h-120"
             }`}
           >
-            {data.map((rowData, rowIndex) => {
-              const combinedData = tableConfig.columns
+            {mobileItems.map((rowData, rowIndex) => {
+              if (loading || data.length === 0) return null;
+
+              // Build an array of cell elements for mobile columns
+              const cells = tableConfig.columns
                 .filter(
                   (col) =>
                     (col.type === "data" ||
@@ -551,72 +677,71 @@ export default function AdminTableCard({
                     col.mobile
                 )
                 .map((col) => {
+                  let content;
+
                   if (col.type === "login-status") {
-                    return `<h1 class="overflow-hidden text-ellipsis">
-                      <strong>${col.header}</strong>: ${
-                      rowData[col.name] === 1 || rowData[col.name] === "1"
-                        ? '<span class="text-green-600 font-bold">Online</span>'
-                        : '<span class="text-red-600 font-bold">Offline</span>'
-                    }
-                    </h1>`;
+                    const isOnline =
+                      rowData[col.name] === 1 || rowData[col.name] === "1";
+                    content = (
+                      <span
+                        className={
+                          isOnline
+                            ? "text-green-600 font-bold"
+                            : "text-red-600 font-bold"
+                        }
+                      >
+                        {isOnline ? "Online" : "Offline"}
+                      </span>
+                    );
                   } else if (col.type === "log-status") {
-                    return `<h1 class="overflow-hidden text-ellipsis">
-                        <strong>${col.header}</strong>: ${
-                      rowData[col.name] === "0"
-                        ? `<span className="text-green-600 font-bold">${
-                            rowData[col.name_2]
-                          }</span>`
-                        : rowData[col.name] === "1"
-                        ? `<span className="text-red-600 font-bold">${
-                            rowData[col.name_2]
-                          }</span>`
-                        : `<span className="text-cyan-400 font-bold">${
-                            rowData[col.name_2]
-                          }</span>`
-                    }
-                    </h1>`;
+                    const status = rowData[col.name];
+                    const label = rowData[col.name_2] || col.default;
+                    let className = "text-cyan-400 font-bold";
+                    if (status === "0") className = "text-green-600 font-bold";
+                    else if (status === "1")
+                      className = "text-red-600 font-bold";
+
+                    content = <span className={className}>{label}</span>;
                   } else {
-                    return `<h1 class="overflow-hidden text-ellipsis">
-                        <strong>${col.header}</strong>: ${
-                      rowData[col.name] ?? col.default
-                    }
-                      </h1>`;
+                    // generic data column
+                    content = rowData[col.name] ?? col.default;
                   }
-                })
-                .join("");
+
+                  return (
+                    <div key={col.name} className="truncate whitespace-nowrap">
+                      <strong>{col.header}:&nbsp;</strong>
+                      {content}
+                    </div>
+                  );
+                });
+
+              // Find icon column config if any
+              const iconCol = tableConfig.columns.find(
+                (col) => col.type === "icon"
+              );
+
               return (
-                !loading &&
-                data.length > 0 && (
-                  <div
-                    key={rowIndex}
-                    className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all cursor-pointer"
-                    onClick={() => handleView(rowData)}
-                  >
-                    {tableConfig.columns.find((col) => col.type === "icon") && (
-                      <div className="bg-red-600 w-12 flex items-center justify-center text-white mr-2">
-                        {tableConfig.columns.find((col) => col.type === "icon")
-                          .iconUrl ? (
-                          <img
-                            src={
-                              tableConfig.columns.find(
-                                (col) => col.type === "icon"
-                              ).iconUrl
-                            }
-                            alt="icon"
-                            className="w-6 h-6"
-                          />
-                        ) : (
-                          <span className="text-xs font-bold">ICON</span>
-                        )}
-                      </div>
-                    )}
-                    <div className="flex-1 whitespace-pre-line py-2">
-                      <div className="text-xs sm:text-sm md:text-base overflow-hidden truncate">
-                        {Parser(combinedData)}
-                      </div>
+                <div
+                  key={rowIndex}
+                  className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm cursor-pointer overflow-hidden transition-all"
+                  onClick={() => handleView(rowData)}
+                >
+                  {iconCol && (
+                    <div className="bg-red-600 w-14 flex-none flex items-center justify-center text-white">
+                      {iconCol.iconUrl ? (
+                        <img src={iconCol.iconUrl} alt="icon" width={28} />
+                      ) : (
+                        <span className="text-xs font-bold">ICON</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 py-2">
+                    <div className="text-xs sm:text-sm md:text-base flex flex-col space-y-1 px-2">
+                      {cells}
                     </div>
                   </div>
-                )
+                </div>
               );
             })}
           </motion.div>
@@ -639,19 +764,23 @@ export default function AdminTableCard({
         )}
 
         {/* Pagination: Only render on screens wider than 640px */}
-        {!loading &&
-          data.length > 0 &&
-          windowWidth >= (isCollapsed ? 768 : 640) && (
-            <motion.div
-              initial={{ opacity: 0.1, x: -4 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 2 }}
-              transition={{ duration: 0.75 }}
-              className={`hidden mt-4 font-[inter] ${
-                isCollapsed ? "md:block" : "lg:block"
-              }`}
-            >
-              <div className="flex items-center justify-between">
+        <motion.div
+          initial={{ opacity: 0.1, x: -4 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 2 }}
+          transition={{ duration: 0.75 }}
+          className={`hidden mt-4 font-[inter] h-7 ${
+            isCollapsed ? "md:block" : "lg:block"
+          }`}
+        >
+          {!loading &&
+            data.length > 0 &&
+            windowWidth >= (isCollapsed ? 768 : 640) && (
+              <div
+                className={`mt-4 font-[inter] hidden items-center justify-between ${
+                  isCollapsed ? "md:flex" : "lg:flex"
+                }`}
+              >
                 <p className="text-sm text-gray-600">
                   Showing {startIndex + 1} to{" "}
                   {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
@@ -681,10 +810,10 @@ export default function AdminTableCard({
                     />
                   </Button>
                   <h1
-                    className={`font-semibold text-base bg-[#DEE1E6] w-8 text-center ${
+                    className={`font-semibold text-base bg-[#DEE1E6] px-2.5 text-center ${
                       isCollapsed
-                        ? "md:text-base md:h-7 md:p-0.5"
-                        : "lg:text-base lg:h-7 lg:p-0.5"
+                        ? "md:text-base md:h-7 md:py-0.5"
+                        : "lg:text-base lg:h-7 lg:py-0.5"
                     }`}
                   >
                     {currentPage}
@@ -713,8 +842,8 @@ export default function AdminTableCard({
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          )}
+            )}
+        </motion.div>
       </div>
     </div>
   );

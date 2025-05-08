@@ -101,6 +101,7 @@ export default function CreateAccountModal({
       if (result.status) {
         handleShowNotification("Account created successfully.", "success");
         if (refreshData) refreshData();
+        resetForm();
         onClose();
       } else {
         handleShowNotification(
@@ -115,6 +116,13 @@ export default function CreateAccountModal({
         "error"
       );
     }
+  }
+
+  function resetForm() {
+    setFullName("");
+    setStudentId("");
+    setEmail("");
+    setSectionId("");
   }
 
   // onBlur handlers to scroll to next field smoothly

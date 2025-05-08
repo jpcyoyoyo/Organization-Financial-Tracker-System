@@ -1,29 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input"; // Ensure correct import
+import { Input } from "../../components/ui/input";
 import searchIcon from "../../assets/search.svg";
 import filterIcon from "../../assets/filter.svg";
 import nextIcon from "../../assets/next.svg";
 import prevIcon from "../../assets/prev.svg";
 import { motion } from "framer-motion";
-import FilterPopup from "../../components/ui/filterpopup"; // Adjust path as needed
+import FilterPopup from "../../components/ui/filterpopup";
 import { icons } from "../../assets/icons";
+import deepEqual from "fast-deep-equal";
 
 /**
  * Example listConfig structure:
  * {
  *   columns: [
- *     { type: "icon", iconUrl: "/assets/icon.png" },
+ *     { type: "icon", iconUrl: "iconUrl" },
  *     {
  *       type: "double",
+ *       w_expand: "w-full md:w-8/15 lg:w-9/12",
+ *       w_collapse: "w-full md:w-5/7 lg:w-4/5",
  *       variables: [
- *         { key: "Name of the Budget:", name: "budgetName" },
- *         { key: "Total Budget:", name: "totalBudget" }
+ *         { key: "Key 1: ", name: "value1" },
+ *         { key: "Key 2:", name: "value2" }
  *       ]
  *     },
- *     { type: "single", key: "Date Approved:", name: "dateApproved" },
- *     { type: "single", key: "Another Field:", name: "anotherField" }
+ *     { type: "single", key: "Key", name: "value" }
  *   ]
  * }
  */
@@ -41,20 +43,26 @@ export default function SearchListCard({
   testMode,
   testData, // Expected shape: { data, years }
   cardSize = "h-87 md:h-97",
+  mobileCardSize = "h-120",
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
   // ------------------------------
+  const itemsPerPage = 5;
   const [data, setData] = useState([]);
+  const [isNewData, setIsNewData] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState(null);
   const [year, setYear] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [availableYears, setAvailableYears] = useState([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  // State to track window width for mobile detection
+  const [fetching, setFetching] = useState(true);
+  const [mobileItemsCount, setMobileItemsCount] = useState(itemsPerPage * 2); // Double the itemsPerPage for mobile
+  const mobileContainerRef = useRef(null);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // ------------------------------
@@ -64,6 +72,8 @@ export default function SearchListCard({
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
 
+  const lastDataRef = useRef(null);
+
   // Update window width on resize
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -71,41 +81,39 @@ export default function SearchListCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  function getMode() {
+  const getMode = useCallback(() => {
     const hasSearch = searchTerm.trim().length > 0;
     const hasFilter = year || startDate || endDate;
     if (hasSearch && hasFilter) return "Mixed";
     if (hasSearch) return "Search";
     if (hasFilter) return "Filter";
     return "Populate";
-  }
+  }, [searchTerm, year, startDate, endDate]);
 
-  function buildRequestBody(mode) {
-    let parsedUser = {};
-    try {
-      parsedUser = JSON.parse(userData || "{}");
-    } catch (e) {
-      console.warn("Invalid userData JSON:", e);
-    }
-    const body = { mode, user: parsedUser };
-    if (mode === "Search" || mode === "Mixed") {
+  const requestBody = useMemo(() => {
+    const parsedUser = JSON.parse(userData || "{}");
+    const body = { mode: getMode(), user: parsedUser };
+
+    if (searchTerm.trim()) {
       body.searchTerm = searchTerm;
     }
-    if (mode === "Filter" || mode === "Mixed") {
+    if (year || startDate || endDate) {
       body.year = year;
       body.startDate = startDate;
       body.endDate = endDate;
     }
-    return JSON.stringify(body);
-  }
 
-  async function fetchData(mode) {
+    return JSON.stringify(body);
+  }, [userData, searchTerm, year, startDate, endDate, getMode]);
+
+  const fetchData = useCallback(async () => {
+    setError(null);
     setLoading(true);
     try {
       const response = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: buildRequestBody(mode),
+        body: requestBody,
       });
       if (!response.ok) {
         throw new Error("Failed to fetch data");
@@ -117,15 +125,37 @@ export default function SearchListCard({
           new Date(b.dateDeposited || b.dateApproved) -
           new Date(a.dateDeposited || a.dateApproved)
       );
-      setData(sortedData);
+
+      if (sortedData !== data) {
+        setData(sortedData);
+      }
+
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
+      setError(error.message);
     } finally {
       setLoading(false);
+      setFetching(false);
     }
-  }
+  }, [fetchUrl, requestBody, data]);
+
+  useEffect(() => {
+    if (
+      getMode() === "Populate" &&
+      !fetching &&
+      lastDataRef.current.length &&
+      !deepEqual(data, lastDataRef.current)
+    ) {
+      setIsNewData(true);
+      setLoading(true);
+      fetchData();
+      console.log("Updating data...");
+      setTimeout(() => setIsNewData(false), 800);
+    }
+    lastDataRef.current = data;
+  }, [data, fetching, getMode, fetchData]);
 
   useEffect(() => {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -137,10 +167,15 @@ export default function SearchListCard({
       setData(sortedTestData);
       setAvailableYears(testData.years || []);
     } else {
-      fetchData("Populate");
+      if (fetching) {
+        fetchData();
+        if (!data) {
+          setLoading(true);
+        }
+        console.log("Fetching data...");
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testMode, testData]);
+  }, [testMode, testData, fetchData, fetching, data]);
 
   function handleSearch() {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -188,30 +223,39 @@ export default function SearchListCard({
       setAvailableYears(testData.years || []);
       setCurrentPage(1);
     } else {
-      // Normal behavior
-      if (!searchTerm.trim()) {
-        fetchData("Populate");
-        return;
-      }
       setCurrentPage(1);
-      fetchData(getMode());
+      setLoading(true);
+      setFetching(true);
     }
   }
 
   useEffect(() => {
     if (!searchTerm.trim() && !testMode) {
-      fetchData("Populate");
+      setFetching(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, testMode]);
+
+  function handleResetFilter() {
+    setYear("");
+    setStartDate("");
+    setEndDate("");
+    setFilterOpen(false);
+    setLoading(true);
+    setFetching(true);
+  }
 
   function handleApplyFilter() {
     setFilterOpen(false);
     setCurrentPage(1);
-    fetchData(getMode());
+    setLoading(true);
+    setFetching(true);
   }
 
-  const itemsPerPage = 5;
+  useEffect(() => {
+    if (!searchTerm.trim() && !testMode) {
+      setFetching(true);
+    }
+  }, [setFetching, searchTerm, testMode]);
 
   const totalItems = data.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -229,8 +273,77 @@ export default function SearchListCard({
   }
 
   function refreshData() {
-    fetchData("Populate");
+    if (searchTerm.trim()) {
+      setSearchTerm("");
+    }
+
+    setFetching(true);
+    console.log("Refreshing data...");
   }
+
+  const handleLoadMore = useCallback(() => {
+    if (mobileItemsCount < data.length) {
+      setMobileItemsCount((prevCount) =>
+        Math.min(prevCount + itemsPerPage * 2, data.length)
+      );
+    }
+  }, [mobileItemsCount, data.length, itemsPerPage]);
+
+  useEffect(() => {
+    console.log(
+      "[MobileScroll] effect run →",
+      "windowWidth:",
+      windowWidth,
+      "mobileItemsCount:",
+      mobileItemsCount,
+      "data.length:",
+      data.length,
+      "mobileContainerRef",
+      mobileContainerRef.current
+    );
+
+    if (
+      windowWidth < (isCollapsed ? 768 : 1024) &&
+      mobileContainerRef.current
+    ) {
+      const scrollEl = mobileContainerRef.current;
+
+      const onScroll = () => {
+        const { scrollTop, clientHeight, scrollHeight } = scrollEl;
+        console.log("[MobileScroll:onScroll]", {
+          scrollTop,
+          clientHeight,
+          scrollHeight,
+        });
+
+        if (scrollTop + clientHeight >= scrollHeight - 10) {
+          console.log("[MobileScroll] bottom reached → loading more");
+          handleLoadMore();
+        }
+      };
+
+      scrollEl.addEventListener("scroll", onScroll);
+      return () => {
+        console.log("[MobileScroll] cleaning up listener");
+        scrollEl.removeEventListener("scroll", onScroll);
+      };
+    }
+  }, [windowWidth, mobileItemsCount, data.length, handleLoadMore, isCollapsed]);
+
+  const loadingMessage = (() => {
+    if (!loading) return null; // no message if not loading
+    if (isNewData) return "Updating…";
+    switch (getMode()) {
+      case "Mixed":
+        return "Searching records with filter applied…";
+      case "Search":
+        return "Searching records…";
+      case "Filter":
+        return "Filtering records…";
+      default:
+        return "Loading…";
+    }
+  })();
 
   // ------------------------------
   // Render
@@ -249,6 +362,7 @@ export default function SearchListCard({
           onEndDateChange={setEndDate}
           onApply={handleApplyFilter}
           onCancel={() => setFilterOpen(false)}
+          onReset={handleResetFilter}
         />
       )}
 
@@ -264,6 +378,7 @@ export default function SearchListCard({
         <ViewModal
           isOpen={showViewModal}
           onClose={() => setShowViewModal(false)}
+          onGoBack={() => setShowViewModal(true)}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
@@ -273,11 +388,13 @@ export default function SearchListCard({
 
       {/* TOP BAR: Card Name + Create Button */}
       <div className="flex items-center justify-between bg-[#EA916E] rounded-t-xl px-4 py-2">
-        <h1 className="text-2xl md:text-3xl font-bold">{cardName}</h1>
+        <h1 className="text-2xl md:text-3xl font-bold truncate">{cardName}</h1>
         {CreateModal && (
           <Button
             onClick={() => setShowCreateModal(true)}
-            className="transition-all duration-300 bg-[#ff7d32] text-white md:hover:bg-[#a55121] cursor-pointer p-2 md:px-3 md:py-1 rounded-md flex flex-row hover:-translate-y-0.5"
+            className={`transition-all duration-300 bg-[#ff7d32] text-white md:hover:bg-[#a55121] cursor-pointer p-2 ${
+              isCollapsed ? "md:px-3 md:py-1" : "lg:px-3 lg:py-1"
+            } rounded-md flex flex-row hover:-translate-y-0.5`}
           >
             {listConfig.createButton?.iconUrl ? (
               <img
@@ -311,17 +428,31 @@ export default function SearchListCard({
         {/* SEARCH & FILTER BAR */}
         <div className="flex items-center justify-end sm:justify-between pb-4 w-full">
           {/* RECORD COUNT (aligned left) */}
-          <div className="hidden sm:block text-sm sm:text-base text-gray-600 pl-2">
+          <div
+            className={`hidden ${
+              isCollapsed ? "md:block" : "lg:block"
+            } text-sm sm:text-base text-gray-600 pl-2`}
+          >
             Total Records: {totalItems}
           </div>
           {/* SEARCH & FILTER (aligned right) */}
-          <div className="transition-all flex space-x-2 justify-between sm:justify-end items-center w-full sm:w-auto">
-            <div className="flex flex-row w-88/100 sm:w-auto">
+          <div
+            className={`transition-all flex space-x-2 justify-between ${
+              isCollapsed
+                ? "md:justify-end md:w-auto"
+                : "lg:justify-end lg:w-auto"
+            } items-center w-full`}
+          >
+            <div
+              className={`flex flex-row w-88/100 ${
+                isCollapsed ? "md:w-auto" : "lg:w-auto"
+              }`}
+            >
               <Input
                 type="text"
                 placeholder="Search"
-                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 sm:w-100 ${
-                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-45 lg:w-100"
+                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 border border-gray-400 ${
+                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-150 lg:w-100"
                 } h-7`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -333,14 +464,14 @@ export default function SearchListCard({
               />
               <Button
                 onClick={handleSearch}
-                className="px-2 py-1 bg-blue-600 w-14/100 sm:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
+                className="px-2 py-1 bg-blue-600 w-14/100 md:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
               >
                 <img src={searchIcon} width="20" alt="search icon" />
               </Button>
             </div>
             <Button
               onClick={() => setFilterOpen(true)}
-              className="w-12/100 sm:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
+              className="w-12/100 md:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
             >
               <img src={filterIcon} width="20" alt="filter icon" />
             </Button>
@@ -356,7 +487,7 @@ export default function SearchListCard({
               transition={{ duration: 1 }}
               className="h-107.5 md:h-112"
             >
-              <p className="text-center py-2">Loading...</p>
+              <p className="text-sm text-gray-600">{loadingMessage}</p>
             </motion.div>
           )}
 
@@ -413,12 +544,18 @@ export default function SearchListCard({
                                 isCollapsed ? col.w_collapse : col.w_expand
                               }`}
                             >
-                              <p className="text-sm lg:text-base font-bold">
-                                {rowData[col.variables[0].name] ?? "N/A"}
+                              <p className="text-xs lg:text-sm font-bold">
+                                {rowData[col.variables[0].name] ??
+                                  (col.default || "N/A")}
                               </p>
-                              <p className="text-base lg:text-xl">
-                                <strong>{col.variables[1].key} </strong>
-                                {rowData[col.variables[1].name] ?? "N/A"}
+                              <p className="text-base lg:text-lg">
+                                <strong>
+                                  {col.variables[1].key
+                                    ? `${col.variables[1].key}: `
+                                    : ""}
+                                </strong>
+                                {rowData[col.variables[1].name] ??
+                                  (col.default || "N/A")}
                               </p>
                             </div>
                           );
@@ -431,11 +568,13 @@ export default function SearchListCard({
                                 isCollapsed ? col.w_collapse : col.w_expand
                               }`}
                             >
-                              <p className="text-xs sm:text-sm lg:text-base">
-                                <strong>{col.key} </strong>
+                              <p className="text-xs lg:text-sm">
+                                <strong>
+                                  {col.key ? `${col.key}: ` : ""}{" "}
+                                </strong>
                               </p>
-                              <p className="text-base lg:text-xl">
-                                {rowData[col.name] ?? "N/A"}
+                              <p className="text-base lg:text-lg">
+                                {rowData[col.name] ?? (col.default || "N/A")}
                               </p>
                             </div>
                           );
@@ -449,91 +588,125 @@ export default function SearchListCard({
             )}
           </div>
 
+          {/* For screens smaller than sm: single-column layout */}
           <div className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}>
             {!loading && data.length > 0 && (
               <motion.div
+                ref={mobileContainerRef}
                 initial={{ opacity: 0.5, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 2 }}
                 transition={{ duration: 0.5 }}
+                className={`space-y-2 mt-2 overflow-y-auto ${mobileCardSize}`}
               >
-                <div className={`space-y-3 mt-2 overflow-y-auto h-120`}>
-                  {data.map((rowData, idx) => (
+                {data.map((rowData, idx) => {
+                  // Build cell elements instead of HTML strings
+                  const cells = listConfig.columns
+                    .filter((col) => col.mobile)
+                    .map((col) => {
+                      if (col.type === "double" && col.variables) {
+                        const [first, second] = col.variables;
+                        const elements = [];
+
+                        if (first.mobile) {
+                          elements.push(
+                            <div
+                              key={`${idx}-${first.name}`}
+                              className="overflow-hidden truncate"
+                            >
+                              <strong>
+                                {first.key ? `${first.key}: ` : ""}
+                              </strong>
+                              <span
+                                className={`${
+                                  !first.key && first.nameStyle
+                                    ? first.nameStyle
+                                    : ""
+                                }`}
+                              >
+                                {rowData[first.name] ?? (col.default || "N/A")}
+                              </span>
+                            </div>
+                          );
+                        }
+                        if (second.mobile) {
+                          elements.push(
+                            <div
+                              key={`${idx}-${second.name}`}
+                              className="overflow-hidden truncate"
+                            >
+                              <strong>
+                                {second.key ? `${second.key}: ` : ""}
+                              </strong>
+                              <span
+                                className={`${
+                                  !second.key && second.nameStyle
+                                    ? second.nameStyle
+                                    : ""
+                                }`}
+                              >
+                                {rowData[second.name] ?? (col.default || "N/A")}
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={`double-${idx}`} className="space-y-1">
+                            {elements}
+                          </div>
+                        );
+                      } else if (col.type === "single" || col.type === "data") {
+                        return (
+                          <div
+                            key={`${idx}-${col.name}`}
+                            className="overflow-hidden truncate"
+                          >
+                            <strong>{col.key ? `${col.key}: ` : ""}</strong>
+                            <span className={`${!col.key ? "text-base" : ""}`}>
+                              {rowData[col.name] ?? (col.default || "N/A")}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    });
+
+                  const iconCol = listConfig.columns.find(
+                    (col) => col.type === "icon"
+                  );
+
+                  return (
                     <div
                       key={idx}
-                      className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-md overflow-hidden shadow-sm transition-all md:hover:-translate-y-1 cursor-pointer"
+                      className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all cursor-pointer"
                       onClick={() => handleView(rowData)}
                     >
-                      {listConfig.columns.map((col, cIndex) => {
-                        if (col.type === "hidden") {
-                          return (
-                            <input
-                              key={cIndex}
-                              type="hidden"
-                              name={col.name}
-                              value={rowData[col.name] || ""}
-                              readOnly
+                      {iconCol && (
+                        <div className="bg-red-600 w-16 flex-none flex items-center justify-center text-white p-2">
+                          {iconCol.iconUrl ? (
+                            <img
+                              src={iconCol.iconUrl}
+                              alt="icon"
+                              className="w-6 h-6"
                             />
-                          );
-                        }
-                        if (col.type === "icon") {
-                          return (
-                            <div
-                              key={cIndex}
-                              className="bg-red-600 w-18 flex items-center justify-center text-white"
-                            >
-                              {col.iconUrl ? (
-                                <img
-                                  src={icons[col.iconUrl] || col.iconUrl}
-                                  alt="icon"
-                                  className="w-8 h-8"
-                                />
-                              ) : (
-                                <span className="text-sm font-bold">ICON</span>
-                              )}
-                            </div>
-                          );
-                        }
-                        if (col.type === "double") {
-                          return (
-                            <div
-                              key={cIndex}
-                              className={`flex flex-col justify-center bg-gray-100 px-3 py-2 ${
-                                isCollapsed ? col.w_collapse : col.w_expand
-                              }`}
-                            >
-                              <p className="text-sm lg:text-base font-bold">
-                                {rowData[col.variables[0].name] ?? "N/A"}
-                              </p>
-                              <p className="text-base lg:text-xl">
-                                <strong>{col.variables[1].key} </strong>
-                                {rowData[col.variables[1].name] ?? "N/A"}
-                              </p>
-                            </div>
-                          );
-                        }
-                        if (col.type === "single") {
-                          return (
-                            <div
-                              key={cIndex}
-                              className={`hidden md:flex flex-col justify-center bg-gray-100 px-3 py-2 ${
-                                isCollapsed ? col.w_collapse : col.w_expand
-                              }`}
-                            >
-                              <p className="text-xs sm:text-sm lg:text-base">
-                                <strong>{col.key} </strong>
-                              </p>
-                              <p className="text-base lg:text-xl">
-                                {rowData[col.name] ?? "N/A"}
-                              </p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })}
+                          ) : (
+                            <span className="text-xs font-bold">ICON</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0 whitespace-pre-line py-2 px-2">
+                        <div
+                          className={`text-xs ${
+                            isCollapsed ? "md:text-base" : "lg:text-base"
+                          } space-y-1`}
+                        >
+                          {cells}
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </motion.div>
             )}
           </div>
@@ -544,9 +717,11 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.75 }}
-              className="h-107.5 md:h-112"
+              className="h-107.5 md:h-112 flex items-center justify-center"
             >
-              <p className="text-sm text-gray-600">No data found.</p>
+              <p className="text-sm text-gray-600">
+                {error ? error : "No record found."}
+              </p>
             </motion.div>
           )}
 
@@ -647,4 +822,5 @@ SearchListCard.propTypes = {
     ),
   }),
   cardSize: PropTypes.string,
+  mobileCardSize: PropTypes.string,
 };

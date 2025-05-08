@@ -1,22 +1,20 @@
 import { useState, useContext } from "react";
+import { useOutletContext } from "react-router-dom";
 import Modal from "../../components/ui/modal";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
-import NotificationPopup from "../../components/ui/notificationpopup";
 
 export default function DeleteAccountModal({
   isOpen,
   onClose,
   id,
+  onGoBack,
   refreshData,
 }) {
   const [loading, setLoading] = useState(false);
-  const [notificationMsg, setNotificationMsg] = useState("");
-  const [notificationType, setNotificationType] = useState("success");
-  const [showNotification, setShowNotification] = useState(false);
-
   const ip = useContext(IpContext);
+  const { handleShowNotification } = useOutletContext();
 
   async function handleDeleteAccount() {
     setLoading(true);
@@ -28,21 +26,21 @@ export default function DeleteAccountModal({
       });
       const result = await res.json();
       if (result.status) {
-        setNotificationMsg("Account deleted successfully.");
-        setNotificationType("success");
-        setShowNotification(true);
+        handleShowNotification("Account deleted successfully.", "success");
         if (refreshData) refreshData();
         onClose();
       } else {
-        setNotificationMsg(result.error || "Account deletion failed.");
-        setNotificationType("error");
-        setShowNotification(true);
+        handleShowNotification(
+          result.error || "Account deletion failed.",
+          "error"
+        );
       }
     } catch (error) {
       console.error("Error deleting account:", error);
-      setNotificationMsg("Account deletion failed due to an error.");
-      setNotificationType("error");
-      setShowNotification(true);
+      handleShowNotification(
+        "Account deletion failed due to an error.",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
@@ -63,7 +61,7 @@ export default function DeleteAccountModal({
           </p>
           <div className="flex justify-end mt-10 space-x-2 sm:space-x-4 h-1/2">
             <Button
-              onClick={onClose}
+              onClick={onGoBack}
               className="bg-gray-400 hover:bg-gray-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
             >
               Cancel
@@ -78,13 +76,6 @@ export default function DeleteAccountModal({
           </div>
         </div>
       </Modal>
-      {showNotification && (
-        <NotificationPopup
-          message={notificationMsg}
-          type={notificationType}
-          onClose={() => setShowNotification(false)}
-        />
-      )}
     </>
   );
 }
@@ -92,6 +83,7 @@ export default function DeleteAccountModal({
 DeleteAccountModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
+  onGoBack: PropTypes.func,
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   refreshData: PropTypes.func,
 };

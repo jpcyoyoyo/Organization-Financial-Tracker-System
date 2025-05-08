@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchListCard from "../../components/ui/SearchListCard";
+import MainContent from "../../components/ui/maincontent";
+import SearchListCard from "../../components/ui/searchlistcard";
 
 const testData = {
   data: [
@@ -40,13 +40,15 @@ export default function Announcements() {
         w_collapse: "w-full md:w-5/7 lg:w-4/5",
         key: "",
         name: "announcementName",
+        mobile: true,
       },
       {
         type: "single",
         w_expand: "w-7/15 lg:w-3/12",
         w_collapse: "md:w-2/7 lg:lg:w-1/5",
-        key: "Date Announced:",
+        key: "Date Announced",
         name: "dateAnnounced",
+        mobile: true,
       },
     ],
   };

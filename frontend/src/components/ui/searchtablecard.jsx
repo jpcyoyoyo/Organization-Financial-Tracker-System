@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -8,8 +8,8 @@ import nextIcon from "../../assets/next.svg";
 import prevIcon from "../../assets/prev.svg";
 import { motion } from "framer-motion";
 import FilterPopup from "../../components/ui/filterpopup";
-import Parser from "html-react-parser";
 import { icons } from "../../assets/icons";
+import deepEqual from "fast-deep-equal";
 
 /**
  * Example tableConfig:
@@ -67,11 +67,13 @@ export default function SearchTableCard({
   testMode,
   testData, // { data: [...], years: [...] }
   cardSize = "h-113 md:h-117",
+  mobileCardSize = "h-120",
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
   // ------------------------------
   const [data, setData] = useState([]);
+  const [isNewData, setIsNewData] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [error, setError] = useState(null);
@@ -81,7 +83,9 @@ export default function SearchTableCard({
   const [availableYears, setAvailableYears] = useState([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  // State to track window width for mobile detection
+  const [fetching, setFetching] = useState(true);
+  const [mobileItemsCount, setMobileItemsCount] = useState(itemsPerPage * 2); // Double the itemsPerPage for mobile
+  const mobileContainerRef = useRef(null);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // ------------------------------
@@ -91,6 +95,8 @@ export default function SearchTableCard({
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
 
+  const lastDataRef = useRef(null);
+
   // Update window width on resize
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -98,63 +104,76 @@ export default function SearchTableCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  function getMode() {
+  const getMode = useCallback(() => {
     const hasSearch = searchTerm.trim().length > 0;
     const hasFilter = year || startDate || endDate;
     if (hasSearch && hasFilter) return "Mixed";
     if (hasSearch) return "Search";
     if (hasFilter) return "Filter";
     return "Populate";
-  }
+  }, [searchTerm, year, startDate, endDate]);
 
-  function buildRequestBody(mode) {
-    let parsedUser = {};
-    try {
-      parsedUser = JSON.parse(userData || "{}");
-    } catch (e) {
-      console.warn("Invalid userData JSON:", e);
-    }
-    const body = { mode, user: parsedUser };
-    if (mode === "Search" || mode === "Mixed") {
+  const requestBody = useMemo(() => {
+    const parsedUser = JSON.parse(userData || "{}");
+    const body = { mode: getMode(), user: parsedUser };
+
+    if (searchTerm.trim()) {
       body.searchTerm = searchTerm;
     }
-    if (mode === "Filter" || mode === "Mixed") {
+    if (year || startDate || endDate) {
       body.year = year;
       body.startDate = startDate;
       body.endDate = endDate;
     }
-    return JSON.stringify(body);
-  }
 
-  async function fetchData(mode) {
-    setLoading(true);
-    setError(null); // reset error state on new fetch
+    return JSON.stringify(body);
+  }, [userData, searchTerm, year, startDate, endDate, getMode]);
+
+  const fetchData = useCallback(async () => {
+    setError(null);
     try {
-      const response = await fetch(fetchUrl, {
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: buildRequestBody(mode),
+        body: requestBody,
       });
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
-      }
-      const result = await response.json();
-      const fetchedData = Array.isArray(result.data) ? result.data : [];
-      const sortedData = fetchedData.sort(
-        (a, b) =>
-          new Date(b.dateDeposited || b.dateApproved) -
-          new Date(a.dateDeposited || a.dateApproved)
-      );
-      setData(sortedData);
+      if (!res.ok) throw new Error("Failed to fetch data");
+      const result = await res.json();
+      const raw = Array.isArray(result.data) ? result.data : [];
+      const sorted = raw
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.dateDeposited || b.dateApproved) -
+            new Date(a.dateDeposited || a.dateApproved)
+        );
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
-    } catch (error) {
-      console.error("Error fetching table data:", error);
+      setData(sorted);
+    } catch (e) {
+      console.error(e);
+      setError(e.message);
       setData([]);
-      setError(error.message);
     } finally {
       setLoading(false);
+      setFetching(false);
     }
-  }
+  }, [fetchUrl, requestBody]);
+
+  useEffect(() => {
+    if (
+      getMode() === "Populate" &&
+      !fetching &&
+      lastDataRef.current.length &&
+      !deepEqual(data, lastDataRef.current)
+    ) {
+      setIsNewData(true);
+      setLoading(true);
+      fetchData();
+      console.log("Updating data...");
+      setTimeout(() => setIsNewData(false), 800);
+    }
+    lastDataRef.current = data;
+  }, [data, fetching, getMode, fetchData]);
 
   useEffect(() => {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -163,13 +182,20 @@ export default function SearchTableCard({
           new Date(b.dateDeposited || b.dateApproved) -
           new Date(a.dateDeposited || a.dateApproved)
       );
-      setData(sortedTestData);
+      if (!deepEqual(data, sortedTestData)) {
+        setData(sortedTestData);
+      }
       setAvailableYears(testData.years || []);
     } else {
-      fetchData("Populate");
+      if (fetching) {
+        fetchData();
+        if (!data || data.length === 0) {
+          setLoading(true);
+        }
+        console.log("Fetching data...");
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testMode, testData]);
+  }, [testMode, testData, fetchData, fetching, data]);
 
   function handleSearch() {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -217,28 +243,39 @@ export default function SearchTableCard({
       setAvailableYears(testData.years || []);
       setCurrentPage(1);
     } else {
-      // Normal behavior
-      if (!searchTerm.trim()) {
-        fetchData("Populate");
-        return;
-      }
       setCurrentPage(1);
-      fetchData(getMode());
+      setLoading(true);
+      if (!testMode) {
+        setFetching(true);
+      }
+    }
+  }
+
+  function handleResetFilter() {
+    setYear("");
+    setStartDate("");
+    setEndDate("");
+    setFilterOpen(false);
+    setLoading(true);
+    if (!testMode) {
+      setFetching(true);
+    }
+  }
+
+  function handleApplyFilter() {
+    setFilterOpen(false);
+    setCurrentPage(1);
+    setLoading(true);
+    if (!testMode) {
+      setFetching(true);
     }
   }
 
   useEffect(() => {
     if (!searchTerm.trim() && !testMode) {
-      fetchData("Populate");
+      setFetching(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
-
-  function handleApplyFilter() {
-    setFilterOpen(false);
-    setCurrentPage(1);
-    fetchData(getMode());
-  }
+  }, [setFetching, searchTerm, testMode]);
 
   const totalItems = data.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -256,8 +293,79 @@ export default function SearchTableCard({
   }
 
   function refreshData() {
-    fetchData("Populate");
+    if (searchTerm.trim()) {
+      setSearchTerm("");
+    }
+
+    if (!testMode) {
+      setFetching(true);
+    }
+    console.log("Refreshing data...");
   }
+
+  const handleLoadMore = useCallback(() => {
+    if (mobileItemsCount < data.length) {
+      setMobileItemsCount((prevCount) =>
+        Math.min(prevCount + itemsPerPage * 2, data.length)
+      );
+    }
+  }, [mobileItemsCount, data.length, itemsPerPage]);
+
+  useEffect(() => {
+    console.log(
+      "[MobileScroll] effect run →",
+      "windowWidth:",
+      windowWidth,
+      "mobileItemsCount:",
+      mobileItemsCount,
+      "data.length:",
+      data.length,
+      "mobileContainerRef",
+      mobileContainerRef.current
+    );
+
+    if (
+      windowWidth < (isCollapsed ? 768 : 1024) &&
+      mobileContainerRef.current
+    ) {
+      const scrollEl = mobileContainerRef.current;
+
+      const onScroll = () => {
+        const { scrollTop, clientHeight, scrollHeight } = scrollEl;
+        console.log("[MobileScroll:onScroll]", {
+          scrollTop,
+          clientHeight,
+          scrollHeight,
+        });
+
+        if (scrollTop + clientHeight >= scrollHeight - 10) {
+          console.log("[MobileScroll] bottom reached → loading more");
+          handleLoadMore();
+        }
+      };
+
+      scrollEl.addEventListener("scroll", onScroll);
+      return () => {
+        console.log("[MobileScroll] cleaning up listener");
+        scrollEl.removeEventListener("scroll", onScroll);
+      };
+    }
+  }, [windowWidth, mobileItemsCount, data.length, handleLoadMore, isCollapsed]);
+
+  const loadingMessage = (() => {
+    if (!loading) return null; // no message if not loading
+    if (isNewData) return "Updating…";
+    switch (getMode()) {
+      case "Mixed":
+        return "Searching records with filter applied…";
+      case "Search":
+        return "Searching records…";
+      case "Filter":
+        return "Filtering records…";
+      default:
+        return "Loading…";
+    }
+  })();
 
   // ------------------------------
   // Render
@@ -276,6 +384,7 @@ export default function SearchTableCard({
           onEndDateChange={setEndDate}
           onApply={handleApplyFilter}
           onCancel={() => setFilterOpen(false)}
+          onReset={handleResetFilter}
         />
       )}
 
@@ -293,6 +402,7 @@ export default function SearchTableCard({
         <ViewModal
           isOpen={showViewModal}
           onClose={() => setShowViewModal(false)}
+          onGoBack={() => setShowViewModal(true)}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
@@ -302,7 +412,7 @@ export default function SearchTableCard({
 
       {/* TOP BAR: Card Name + Create Button */}
       <div className="flex items-center justify-between bg-[#EA916E] rounded-t-xl px-4 py-2">
-        <h1 className="text-2xl md:text-3xl font-bold">{cardName}</h1>
+        <h1 className="text-2xl md:text-3xl font-bold truncate">{cardName}</h1>
         {CreateModal && (
           <Button
             onClick={() => setShowCreateModal(true)}
@@ -340,17 +450,31 @@ export default function SearchTableCard({
         {/* SEARCH & FILTER BAR */}
         <div className="flex items-center justify-end sm:justify-between pb-4 w-full">
           {/* RECORD COUNT (aligned left) */}
-          <div className="hidden sm:block text-sm sm:text-base text-gray-600 pl-2">
+          <div
+            className={`hidden ${
+              isCollapsed ? "md:block" : "lg:block"
+            } text-sm sm:text-base text-gray-600 pl-2`}
+          >
             Total Records: {totalItems}
           </div>
           {/* SEARCH & FILTER (aligned right) */}
-          <div className="transition-all flex space-x-2 justify-between sm:justify-end items-center w-full sm:w-auto">
-            <div className="flex flex-row w-88/100 sm:w-auto">
+          <div
+            className={`transition-all flex space-x-2 justify-between ${
+              isCollapsed
+                ? "md:justify-end md:w-auto"
+                : "lg:justify-end lg:w-auto"
+            } items-center w-full`}
+          >
+            <div
+              className={`flex flex-row w-88/100 ${
+                isCollapsed ? "md:w-auto" : "lg:w-auto"
+              }`}
+            >
               <Input
                 type="text"
                 placeholder="Search"
-                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 sm:w-100 border border-gray-400 ${
-                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-45 lg:w-100"
+                className={`transition-all bg-white text-sm sm:text-base self-stretch rounded-l-md w-86/100 border border-gray-400 ${
+                  isCollapsed ? "md:w-90 lg:w-120" : "md:w-150 lg:w-100"
                 } h-7`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -362,14 +486,14 @@ export default function SearchTableCard({
               />
               <Button
                 onClick={handleSearch}
-                className="px-2 py-1 bg-blue-600 w-14/100 sm:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
+                className="px-2 py-1 bg-blue-600 w-14/100 md:w-auto text-white rounded-r-md hover:bg-blue-700 justify-items-center cursor-pointer"
               >
                 <img src={searchIcon} width="20" alt="search icon" />
               </Button>
             </div>
             <Button
               onClick={() => setFilterOpen(true)}
-              className="w-12/100 sm:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
+              className="w-12/100 md:w-auto px-2 py-1 bg-gray-300 text-black rounded-md hover:bg-gray-400 justify-items-center cursor-pointer h-7"
             >
               <img src={filterIcon} width="20" alt="filter icon" />
             </Button>
@@ -426,9 +550,11 @@ export default function SearchTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 1 }}
-            className="mt-2 h-124 md:h-128 flex items-center justify-center"
+            className={`mt-2 ${
+              cardSize || "h-124 md:h-128"
+            } flex items-center justify-center`}
           >
-            <p className="text-center py-2">Loading...</p>
+            <p className="text-sm text-gray-600">{loadingMessage}</p>
           </motion.div>
         )}
 
@@ -529,52 +655,44 @@ export default function SearchTableCard({
         <div className={`block ${isCollapsed ? "md:hidden" : "lg:hidden"}`}>
           {!loading && data.length > 0 && (
             <motion.div
+              ref={mobileContainerRef}
               initial={{ opacity: 0.5, x: -4 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.5 }}
-              className="space-y-2 mt-2 overflow-y-auto h-120"
+              className={`space-y-2 mt-2 overflow-y-auto ${mobileCardSize}`}
             >
-              {data.map((rowData, rowIndex) => {
-                // For mobile, we combine all data columns where col.mobile is true.
-                const combinedData = tableConfig.columns
+              {data.map((row, i) => {
+                const cells = tableConfig.columns
                   .filter((col) => col.type === "data" && col.mobile)
-                  .map(
-                    (col) =>
-                      `<h1 className="overflow-hidden text-ellipsis"><strong>${
-                        col.header
-                      }</strong>: ${rowData[col.name] ?? "N/A"}</h1>`
-                  )
-                  .join("");
+                  .map((col) => (
+                    <div key={col.name} className="truncate">
+                      <strong>{col.header}:&nbsp;</strong>
+                      <span>{row[col.name] ?? "N/A"}</span>
+                    </div>
+                  ));
+
+                const iconCol = tableConfig.columns.find(
+                  (col) => col.type === "icon"
+                );
+
                 return (
                   <div
-                    key={rowIndex}
-                    className="flex flex-row bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all cursor-pointer"
-                    onClick={() => handleView(rowData)}
+                    key={i}
+                    className="flex bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm cursor-pointer"
+                    onClick={() => handleView(row)}
                   >
-                    {/** Icon Column */}
-                    {tableConfig.columns.find((col) => col.type === "icon") && (
-                      <div className="bg-red-600 w-16 flex items-center justify-center text-white mr-2">
-                        {tableConfig.columns.find((col) => col.type === "icon")
-                          .iconUrl ? (
-                          <img
-                            src={
-                              tableConfig.columns.find(
-                                (col) => col.type === "icon"
-                              ).iconUrl
-                            }
-                            alt="icon"
-                            className="w-6 h-6"
-                          />
+                    {iconCol && (
+                      <div className="bg-red-600 w-16 flex-none flex items-center justify-center text-white rounded-l-lg p-2">
+                        {iconCol.iconUrl ? (
+                          <img src={iconCol.iconUrl} alt="icon" width={24} />
                         ) : (
                           <span className="text-xs font-bold">ICON</span>
                         )}
                       </div>
                     )}
-                    <div className="flex-1 whitespace-pre-line py-2">
-                      <div className="text-sm md:text-base overflow-hidden truncate">
-                        {Parser(combinedData)}
-                      </div>
+                    <div className="flex-1 min-w-0 flex flex-col p-2 text-xs sm:text-sm md:text-basespace-y-1">
+                      {cells}
                     </div>
                   </div>
                 );
@@ -589,7 +707,9 @@ export default function SearchTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.75 }}
-            className="mt-2 h-124 md:h-128 flex items-center justify-center"
+            className={`mt-2 ${
+              cardSize || "h-124 md:h-128"
+            } flex items-center justify-center`}
           >
             <p className="text-sm text-gray-600">
               {error ? error : "No record found."}
@@ -597,17 +717,20 @@ export default function SearchTableCard({
           </motion.div>
         )}
 
-        {!loading &&
-          data.length > 0 &&
-          windowWidth >= (isCollapsed ? 768 : 640) && (
-            <motion.div
-              initial={{ opacity: 0.1, x: -4 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 2 }}
-              transition={{ duration: 0.75 }}
-              className="mt-4 font-[inter]"
-            >
-              <div className="flex items-center justify-between">
+        <motion.div
+          initial={{ opacity: 0.1, x: -4 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 2 }}
+          transition={{ duration: 0.75 }}
+        >
+          {!loading &&
+            data.length > 0 &&
+            windowWidth >= (isCollapsed ? 768 : 640) && (
+              <div
+                className={`mt-4 font-[inter] hidden items-center justify-between ${
+                  isCollapsed ? "md:flex" : "lg:flex"
+                }`}
+              >
                 <p className="text-sm text-gray-600">
                   Showing {startIndex + 1} to{" "}
                   {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
@@ -669,8 +792,8 @@ export default function SearchTableCard({
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          )}
+            )}
+        </motion.div>
       </div>
     </div>
   );
@@ -713,4 +836,5 @@ SearchTableCard.propTypes = {
     ),
   }),
   cardSize: PropTypes.string,
+  mobileCardSize: PropTypes.string,
 };

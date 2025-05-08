@@ -67,8 +67,8 @@ export default function UpdateAccountModal({
   useEffect(() => {
     async function fetchSections() {
       try {
-        const res = await fetch(`${ip}/fetch-sections`, {
-          method: "GET",
+        const res = await fetch(`${ip}/fetch-section-options`, {
+          method: "POST",
         });
         const result = await res.json();
         if (result.status && result.data) {

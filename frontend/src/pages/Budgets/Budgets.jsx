@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchListCard from "../../components/ui/SearchListCard";
+import MainContent from "../../components/ui/maincontent";
+import SearchListCard from "../../components/ui/searchlistcard";
 import ViewBudgetModal from "./ViewBudgetModal";
 
 export default function Budgets() {
@@ -9,22 +9,24 @@ export default function Budgets() {
   const listConfig = {
     columns: [
       { type: "hidden", name: "id" },
-      { type: "icon", iconUrl: "/assets/icon.png" },
+      { type: "icon", iconUrl: "src/assets/react.svg" },
       {
         type: "double",
         w_expand: "w-full md:w-8/15 lg:w-9/12",
         w_collapse: "w-full md:w-5/7 lg:w-4/5",
         variables: [
-          { key: "", name: "budgetName" },
-          { key: "Total Budget:", name: "totalBudget" },
+          { key: "", name: "budgetName", mobile: true },
+          { key: "Total Budget", name: "totalBudget", mobile: true },
         ],
+        mobile: true,
       },
       {
         type: "single",
         w_expand: "w-7/15 lg:w-3/12",
         w_collapse: "md:w-2/7 lg:lg:w-1/5",
-        key: "Date Approved:",
+        key: "Date Approved",
         name: "dateApproved",
+        mobile: true,
       },
     ],
   };

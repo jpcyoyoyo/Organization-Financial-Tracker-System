@@ -1,9 +1,16 @@
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import { NavLink } from "react-router-dom";
 import PropTypes from "prop-types";
 import configData from "../../data/sidebarConfig.json";
 import Logo from "../../components/ui/logo";
 import ProfilePic from "../../components/ui/profilepic";
-import { useEffect, useLayoutEffect, useState } from "react";
 import { icons } from "../../assets/icons";
 
 const getSidebarConfig = (designation) => {
@@ -23,27 +30,8 @@ const getSidebarConfig = (designation) => {
     Object.entries(configData.groups).forEach(([groupName, groupData]) => {
       if (groupName === "Admin Panel") return;
       if (groupName === "Your Obligations") {
-        if (designation === "Representative") {
-          groups.push({ groupName, tabs: groupData["Representative"] });
-        } else if (designation === "Peace Officer") {
-          groups.push({ groupName, tabs: groupData["Peace Officer"] });
-        } else if (designation === "Procurement Officer") {
-          groups.push({ groupName, tabs: groupData["Procurement Officer"] });
-        } else if (designation === "Communication Officer") {
-          groups.push({ groupName, tabs: groupData["Communication Officer"] });
-        } else if (designation === "Auditor") {
-          groups.push({ groupName, tabs: groupData["Auditor"] });
-        } else if (designation === "Treasurer") {
-          groups.push({ groupName, tabs: groupData["Treasurer"] });
-        } else if (designation === "Secretary") {
-          groups.push({ groupName, tabs: groupData["Secretary"] });
-        } else if (designation === "Vice-President") {
-          groups.push({ groupName, tabs: groupData["Vice-President"] });
-        } else if (designation === "President") {
-          groups.push({ groupName, tabs: groupData["President"] });
-        } else {
-          groups.push({ groupName, tabs: groupData["default"] });
-        }
+        const roleTabs = groupData[designation] || groupData["default"];
+        groups.push({ groupName, tabs: roleTabs });
       } else {
         groups.push({ groupName, tabs: groupData });
       }
@@ -53,13 +41,11 @@ const getSidebarConfig = (designation) => {
   return { topLevelTabs, groups };
 };
 
-export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
-  // Initialize state with user data from sessionStorage
+const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const [userData, setUserData] = useState(() => {
     return JSON.parse(sessionStorage.getItem("user")) || {};
   });
 
-  // Effect to update state when session storage changes
   useEffect(() => {
     const updateUserData = () => {
       const updatedUser = JSON.parse(sessionStorage.getItem("user"));
@@ -69,36 +55,31 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     };
 
     window.addEventListener("userUpdated", updateUserData);
-
-    return () => {
-      window.removeEventListener("userUpdated", updateUserData);
-    };
+    return () => window.removeEventListener("userUpdated", updateUserData);
   }, []);
 
-  // Immediately collapse sidebar on mobile before paint
   useLayoutEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setIsCollapsed(true);
-      } else {
-        setIsCollapsed(false);
-      }
+      setIsCollapsed(window.innerWidth < 768);
     };
 
-    // Set initial state
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [setIsCollapsed]);
 
-  const config = getSidebarConfig(userData.designation || "Member");
+  // Memoize sidebar config based on designation
+  const config = useMemo(
+    () => getSidebarConfig(userData.designation || "Member"),
+    [userData.designation]
+  );
 
-  // New function: collapse sidebar on mobile when a tab is clicked
-  const handleNavClick = () => {
+  // Memoize nav click handler to avoid re-creation
+  const handleNavClick = useCallback(() => {
     if (window.innerWidth < 768) {
       setIsCollapsed(true);
     }
-  };
+  }, [setIsCollapsed]);
 
   return (
     <>
@@ -110,12 +91,12 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       )}
       <nav
         className={`fixed top-0 left-0 h-screen z-20 ${
-          isCollapsed
-            ? "w-19 md:w-14 pt-5 md:px-1.5 px-0 md:bg-[#ffffff7e] md:shadow-xl"
-            : "w-76 md:w-76 pt-5 px-3.5 bg-[#ffffff] shadow-xl"
+          {
+            true: "w-19 md:w-14 pt-5 md:px-1.5 px-0 md:bg-[#ffffff7e] md:shadow-xl",
+            false: "w-76 md:w-76 pt-5 px-3.5 bg-[#ffffff] shadow-xl",
+          }[isCollapsed]
         } md:pt-7 transition-all backdrop-opacity-10 backdrop-blur-md font-[inter] not-italic`}
       >
-        {/* Profile Section (Fixed at Top) */}
         <div
           className={`flex flex-col ${
             isCollapsed ? "items-center" : "items-start"
@@ -134,7 +115,6 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               }`}
               onClick={() => setIsCollapsed(!isCollapsed)}
             />
-            {/* Title next to the logo: hide on mobile when collapsed */}
             <span
               className={`absolute left-14 w-60 text-[29px] font-bold font-[archivo] transition-all duration-300 transform ${
                 isCollapsed
@@ -146,7 +126,6 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             </span>
           </div>
 
-          {/* User Info: Hide on mobile when collapsed */}
           <div
             className={`mt-3 md:mt-5 transition-opacity duration-300 ${
               isCollapsed ? "hidden md:flex" : "flex"
@@ -172,8 +151,6 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           </div>
         </div>
 
-        {/* Navigation Tabs (Scrollable) */}
-        {/* Hide navigation tabs on mobile when collapsed */}
         <div
           className={`${
             isCollapsed ? "hidden md:block" : "block"
@@ -264,4 +241,4 @@ Sidebar.propTypes = {
   setIsCollapsed: PropTypes.func.isRequired,
 };
 
-export default Sidebar;
+export default memo(Sidebar);

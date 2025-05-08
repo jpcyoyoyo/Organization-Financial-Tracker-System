@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchTableCard from "../../components/ui/SearchTableCard";
+import MainContent from "../../components/ui/maincontent";
+import SearchTableCard from "../../components/ui/searchtablecard";
 import ViewReportsModal from "./ViewReportsModal";
 
 const tableConfig = {
@@ -30,8 +30,8 @@ const tableConfig = {
     {
       type: "data",
       header: "REPORT TYPE",
-      w_expand: "hidden md:block w-7/15 lg:w-4/14",
-      w_collapse: "hidden lg:block w-2/5 sm:w-2/5 md:w-2/6 lg:w-4/14",
+      w_expand: "hidden md:flex w-7/15 lg:w-4/14",
+      w_collapse: "hidden lg:flex w-2/5 sm:w-2/5 md:w-2/6 lg:w-4/14",
       alignment: "justify-center",
       text_size: "font-bold text-sm md:text-base",
       mobile: false,

@@ -4,7 +4,7 @@ import TableCard from "../../components/ui/tablecard";
 import DataCard from "../../components/ui/datacard";
 import TextCard from "../../components/ui/textcard";
 import { motion } from "framer-motion";
-import { useContext } from "react";
+import { useMemo, useContext } from "react";
 import { IpContext } from "../../context/IpContext";
 
 export default function Dashboard() {
@@ -23,6 +23,20 @@ export default function Dashboard() {
       { header: "Due On", fraction: "6/25", variable: "date_due" },
     ],
   };
+
+  const fetchUrls = useMemo(
+    () => ({
+      totalAccounts: `${ip}/fetch-total-accounts`,
+      onlineAccounts: `${ip}/fetch-online-accounts`,
+      onlineWeb: `${ip}/fetch-online-web`,
+      onlineMobile: `${ip}/fetch-online-mobile`,
+      totalLogs: `${ip}/fetch-total-logs`,
+      logsToday: `${ip}/fetch-logs-today`,
+    }),
+    [ip]
+  );
+
+  console.log("Dashboard re-rendered"); // Debugging log
 
   return (
     <MainContent
@@ -49,7 +63,7 @@ export default function Dashboard() {
               fetchUrl={`${ip}/fetch-your-payments`}
               navUrl="/your-payments"
               userData={userData}
-              h="h-43 md:h-57"
+              h="h-47 md:h-57"
               w={`w-full ${
                 isCollapsed ? "lg:w-11/25" : "xl:w-11/25 lg:w-full"
               }`}
@@ -59,7 +73,7 @@ export default function Dashboard() {
               fetchUrl={`${ip}/fetch-users`}
               navUrl="/your-payments"
               userData={userData}
-              h="h-43 md:h-57"
+              h="h-47 md:h-57"
               w={`w-full ${
                 isCollapsed ? "lg:w-14/25" : "xl:w-14/25 lg:w-full"
               }`}
@@ -89,40 +103,46 @@ export default function Dashboard() {
           transition={{ duration: 0.5 }}
         >
           <div
-            className={`pt-3 md:pt-4 grid ${
+            className={`pt-3 md:pt-4 grid sm:grid-cols-2 ${
               isCollapsed
-                ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3"
-                : "sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
+                ? "lg:grid-cols-3 xl:grid-cols-3"
+                : "md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
             } w-full gap-x-3 gap-y-3 md:gap-x-4 md:gap-y-4`}
           >
             <DataCard
-              title="ONLINE ACCOUNTS"
-              fetchUrl={`${ip}/fetch-online-accounts`}
-              name="online_accounts"
-            />
-            <DataCard
-              title="ONLINE IN MOBILE"
-              fetchUrl={`${ip}/fetch-online-mobile`}
-              name="online_mobile"
-            />
-            <DataCard
-              title="ONLINE IN THE WEB"
-              fetchUrl={`${ip}/fetch-online-web`}
-              name="online_web"
-            />
-            <DataCard
-              title="TOTAL ACCOUNTS"
-              fetchUrl={`${ip}/fetch-total-accounts`}
+              title="Total Accounts"
+              fetchUrl={fetchUrls.totalAccounts}
+              id={userData.id}
               name="total_accounts"
             />
             <DataCard
-              title="TOTAL LOGS"
-              fetchUrl={`${ip}/fetch-total-logs`}
+              title="Online Accounts"
+              fetchUrl={fetchUrls.onlineAccounts}
+              id={userData.id}
+              name="online_accounts"
+            />
+            <DataCard
+              title="Online Web"
+              fetchUrl={fetchUrls.onlineWeb}
+              id={userData.id}
+              name="online_web"
+            />
+            <DataCard
+              title="Online Mobile"
+              fetchUrl={fetchUrls.onlineMobile}
+              id={userData.id}
+              name="online_mobile"
+            />
+            <DataCard
+              title="Total Logs"
+              fetchUrl={fetchUrls.totalLogs}
+              id={userData.id}
               name="total_logs"
             />
             <DataCard
-              title="LOGS TODAY"
-              fetchUrl={`${ip}/fetch-logs-today`}
+              title="Logs Today"
+              fetchUrl={fetchUrls.logsToday}
+              id={userData.id}
               name="logs_today"
             />
           </div>

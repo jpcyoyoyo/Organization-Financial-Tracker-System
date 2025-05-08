@@ -59,6 +59,7 @@
           { "path": "/manage-deposits", "label": "Manage Deposits", "icon": "src/assets/react.svg" },
           { "path": "/manage-expenses", "label": "Manage Expenses", "icon": "src/assets/react.svg" },
           { "path": "/manage-financial-reports", "label": "Manage Financial Reports", "icon": "src/assets/react.svg" },
+          { "path": "/manage-financial-groupings", "label": "Manage Financial Groupings", "icon": "src/assets/react.svg" },
           { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
         ],
         "Secretary": [

@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchTableCard from "../../components/ui/SearchTableCard";
+import MainContent from "../../components/ui/maincontent";
+import SearchTableCard from "../../components/ui/searchtablecard";
 import ViewDepositModal from "./ViewDepositModal";
 import { useContext } from "react";
 import { IpContext } from "../../context/IpContext";
@@ -27,17 +27,17 @@ const tableConfig = {
       alignment: "justify-center",
       text_size: "text-sm md:text-base",
       mobile: true,
-      name: "date",
+      name: "issued_at",
     },
     {
       type: "data",
       header: "SOURCE",
-      w_expand: "hidden lg:block w-7/15 lg:w-5/14",
-      w_collapse: "hidden md:block md:w-2/6 lg:w-5/14",
+      w_expand: "hidden lg:flex w-7/15 lg:w-5/14",
+      w_collapse: "hidden md:flex md:w-2/6 lg:w-5/14",
       alignment: "justify-center",
       mobile: false,
       text_size: "text-sm md:text-base",
-      name: "category",
+      name: "source_name",
     },
     { type: "hidden", name: "id" },
     { type: "action", name: "View", iconUrl: "src/assets/react.svg" },
@@ -53,14 +53,14 @@ export default function Deposits() {
 
   const testData = {
     data: [
-      { id: 1, dateDeposited: "2023-08-01", amount: "₱ 1,000,000.00" },
-      { id: 2, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 3, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 4, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 5, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 6, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 7, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 8, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
+      { id: 1, issued_at: "2023-08-01", amount: "₱ 1,000,000.00" },
+      { id: 2, issued_at: "2023-07-15", amount: "₱ 1000.00" },
+      { id: 3, issued_at: "2023-08-01", amount: "₱ 1000.00" },
+      { id: 4, issued_at: "2023-07-15", amount: "₱ 1000.00" },
+      { id: 5, issued_at: "2023-08-01", amount: "₱ 1000.00" },
+      { id: 6, issued_at: "2023-07-15", amount: "₱ 1000.00" },
+      { id: 7, issued_at: "2023-08-01", amount: "₱ 1000.00" },
+      { id: 8, issued_at: "2023-07-15", amount: "₱ 1000.00" },
     ],
     years: [2021, 2022, 2023],
   };

@@ -8,6 +8,7 @@ import { icons } from "../../assets/icons";
 export default function ViewAccountModal({
   isOpen,
   onClose,
+  onGoBack,
   rowData,
   id,
   updateModal: UpdateModal,
@@ -20,14 +21,6 @@ export default function ViewAccountModal({
   const [showDelete, setShowDelete] = useState(false);
 
   const ip = useContext(IpContext);
-
-  // Local close handler that refreshes table data
-  function handleModalClose() {
-    onClose();
-    if (refreshData) {
-      refreshData();
-    }
-  }
 
   // Fetch detailed info when modal is open and id exists.
   useEffect(() => {
@@ -67,7 +60,12 @@ export default function ViewAccountModal({
       <Modal
         title="VIEW ACCOUNT"
         isOpen={isOpen}
-        onClose={handleModalClose}
+        onClose={() => {
+          onClose();
+          if (refreshData) {
+            refreshData();
+          }
+        }}
         w="w-11/12 h-11/12 sm:w-5/7 lg:w-4/7"
       >
         {loading ? (
@@ -182,8 +180,10 @@ export default function ViewAccountModal({
               {UpdateModal && (
                 <Button
                   onClick={() => {
-                    handleModalClose();
-                    setShowUpdate(true);
+                    onClose();
+                    setTimeout(() => {
+                      setShowUpdate(true);
+                    }, 300);
                   }}
                   className="bg-blue-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-blue-800 transform hover:scale-105 flex items-center h-8"
                 >
@@ -193,8 +193,10 @@ export default function ViewAccountModal({
               {DeleteModal && (
                 <Button
                   onClick={() => {
-                    handleModalClose();
-                    setShowDelete(true);
+                    onClose();
+                    setTimeout(() => {
+                      setShowDelete(true);
+                    }, 300);
                   }}
                   className="bg-red-600 hover:bg-red-800 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
                 >
@@ -211,7 +213,10 @@ export default function ViewAccountModal({
       {UpdateModal && showUpdate && (
         <UpdateModal
           isOpen={showUpdate}
-          onClose={() => setShowUpdate(false)}
+          onClose={() => {
+            setShowUpdate(false);
+            onGoBack();
+          }}
           rowData={rowData}
           id={id}
           refreshData={refreshData}
@@ -221,7 +226,13 @@ export default function ViewAccountModal({
       {DeleteModal && showDelete && (
         <DeleteModal
           isOpen={showDelete}
-          onClose={() => setShowDelete(false)}
+          onClose={() => {
+            setShowDelete(false);
+          }}
+          onGoBack={() => {
+            setShowDelete(false);
+            onGoBack();
+          }}
           id={id}
           rowData={rowData}
           refreshData={refreshData}
@@ -234,6 +245,7 @@ export default function ViewAccountModal({
 ViewAccountModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
+  onGoBack: PropTypes.func,
   rowData: PropTypes.object,
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   updateModal: PropTypes.elementType,

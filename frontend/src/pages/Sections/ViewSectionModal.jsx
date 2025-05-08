@@ -59,7 +59,7 @@ export default function ViewSectionModal({ isOpen, onClose, id, refreshData }) {
         title="SECTION DETAILS"
         isOpen={isOpen}
         onClose={handleClose}
-        w="w-11/12 h-8/12 sm:w-5/7 lg:w-3/7"
+        w="w-11/12 h-9/12 sm:h-8/12 sm:w-5/7 lg:w-3/7"
         modalCenter={true}
       >
         {loading ? (
@@ -68,7 +68,7 @@ export default function ViewSectionModal({ isOpen, onClose, id, refreshData }) {
           </div>
         ) : details ? (
           <div className="p-4 h-full w-full">
-            <div className="space-y-2 h-9/10 overflow-y-auto text-sm sm:text-base">
+            <div className="space-y-2 h-full overflow-y-auto text-sm">
               <h1 className="font-bold text-center sm:text-start">
                 CURRENT SECTION REPRESENTATIVE
               </h1>
@@ -89,7 +89,7 @@ export default function ViewSectionModal({ isOpen, onClose, id, refreshData }) {
                   <h1>{`Representaive - ${details.name}`}</h1>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block font-semibold">Section Name</label>
                   <div>{details.name}</div>
@@ -110,6 +110,8 @@ export default function ViewSectionModal({ isOpen, onClose, id, refreshData }) {
                   </label>
                   <div>{details.student_no}</div>
                 </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block font-semibold">Section Created</label>
                   <div>{details.created_at}</div>

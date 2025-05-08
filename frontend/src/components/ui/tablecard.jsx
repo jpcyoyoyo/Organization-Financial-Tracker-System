@@ -75,7 +75,7 @@ export default function TableCard({
                 {tableConfig.columns.map((col, index) => (
                   <th
                     key={index}
-                    className="text-left text-xs sm:text-sm md:text-base px-2.5 md:px-5 py-0.5 md:py-1 border-b border-gray-300 font-normal"
+                    className="text-left text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-b border-gray-300 font-normal"
                     style={{ width: getColumnWidth(col.fraction) }}
                   >
                     {col.header}
@@ -89,7 +89,7 @@ export default function TableCard({
                   {tableConfig.columns.map((col, colIndex) => (
                     <td
                       key={colIndex}
-                      className="text-xs sm:text-sm md:text-base px-2.5 md:px-5 py-0.5 md:py-1 border-gray-200"
+                      className="text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-gray-200"
                       style={{ width: getColumnWidth(col.fraction) }}
                     >
                       {row[col.variable]}
