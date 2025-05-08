@@ -208,7 +208,7 @@ export default function UpdateManageFinancialGroupingModal({
           <div className="flex place-self-end items-end h-3/17">
             <Button
               type="submit"
-              className="bg-green-600 text-white px-4 py-2 rounded h-10 cursor-pointer transition-all duration-150 hover:bg-green-800 transform hover:scale-105"
+              className="bg-blue-600 hover:bg-blue-800 text-white px-4 py-2 rounded h-10 cursor-pointer transition-all duration-150 transform hover:scale-105"
             >
               Update Group
             </Button>

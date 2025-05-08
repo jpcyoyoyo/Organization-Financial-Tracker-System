@@ -725,22 +725,30 @@ export default function SearchListCard({
             </motion.div>
           )}
 
-          {!loading &&
-            data.length > 0 &&
-            windowWidth >= (isCollapsed ? 768 : 640) && (
-              <motion.div
-                initial={{ opacity: 0.1, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 2 }}
-                transition={{ duration: 0.75 }}
-              >
-                <div className="flex items-center justify-between mt-14 lg:mt-8 font-[inter]">
+          {/* Pagination: Only render on screens wider than 640px */}
+          <motion.div
+            initial={{ opacity: 0.1, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 2 }}
+            transition={{ duration: 0.75 }}
+            className={`hidden mt-4 font-[inter] h-7 ${
+              isCollapsed ? "md:block" : "lg:block"
+            }`}
+          >
+            {!loading &&
+              data.length > 0 &&
+              windowWidth >= (isCollapsed ? 768 : 640) && (
+                <div
+                  className={`mt-4 font-[inter] hidden items-center justify-between ${
+                    isCollapsed ? "md:flex" : "lg:flex"
+                  }`}
+                >
                   <p className="text-sm text-gray-600">
                     Showing {startIndex + 1} to{" "}
                     {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
                     {totalItems} entries
                   </p>
-                  <div className="flex space-x-2 items-center content-center">
+                  <div className="flex space-x-2 items-center">
                     <Button
                       onClick={() => handlePageChange(currentPage - 1)}
                       className={`px-1.5 py-0.5 ${
@@ -764,10 +772,10 @@ export default function SearchListCard({
                       />
                     </Button>
                     <h1
-                      className={`font-semibold text-base bg-[#DEE1E6] w-8 text-center ${
+                      className={`font-semibold text-base bg-[#DEE1E6] px-2.5 text-center ${
                         isCollapsed
-                          ? "md:text-base md:h-7 md:p-0.5"
-                          : "lg:text-base lg:h-7 lg:p-0.5"
+                          ? "md:text-base md:h-7 md:py-0.5"
+                          : "lg:text-base lg:h-7 lg:py-0.5"
                       }`}
                     >
                       {currentPage}
@@ -796,8 +804,8 @@ export default function SearchListCard({
                     </Button>
                   </div>
                 </div>
-              </motion.div>
-            )}
+              )}
+          </motion.div>
         </div>
       </div>
     </div>

@@ -500,7 +500,7 @@ export default function ViewManageDepositModal({
                     <Button
                       type="button"
                       onClick={addBreakdownRow}
-                      className="m-2 bg-blue-600 text-white px-3 py-1 rounded text-sm cursor-pointer"
+                      className="transition-all duration-150 transform hover:scale-105 m-2 bg-blue-600 text-white px-3 py-1 rounded text-sm cursor-pointer"
                     >
                       Add Row
                     </Button>
@@ -510,7 +510,7 @@ export default function ViewManageDepositModal({
                   <label className="block text-sm font-semibold">
                     Upload Proof(s)
                   </label>
-                  <div className="flex flex-wrap gap-4">
+                  <div className="flex flex-wrap gap-4 mx-0.5">
                     {proofPreviews.map((url, idx) => {
                       const filename = proof[idx] || url.split("/").pop();
                       return (
@@ -518,12 +518,12 @@ export default function ViewManageDepositModal({
                           <img
                             src={url}
                             alt="Proof preview"
-                            className="w-20 h-20 object-cover rounded cursor-pointer border-2"
+                            className="transition-all duration-150 transform hover:scale-105 w-20 h-20 object-cover rounded cursor-pointer border-2"
                             onClick={() => openLightbox(url)}
                           />
                           <Button
                             type="button"
-                            className="absolute top-0 right-0 m-0.5 bg-red-600 text-white px-1 py-0 text-xs rounded-xs"
+                            className="transition-all duration-150 transform hover:scale-105 absolute top-0 right-0 m-0.5 bg-red-600 text-white px-1 py-0 text-xs rounded-xs"
                             onClick={() => deleteProof(filename)}
                           >
                             X
@@ -537,7 +537,7 @@ export default function ViewManageDepositModal({
                           <Button
                             type="button"
                             onClick={() => cameraInputRef.current.click()}
-                            className="w-20 h-20 flex flex-col items-center justify-center bg-blue-600 text-white rounded cursor-pointer"
+                            className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-blue-600 text-white rounded cursor-pointer"
                           >
                             <img
                               src={icons["src/assets/photo.svg"]}
@@ -551,7 +551,7 @@ export default function ViewManageDepositModal({
                           <Button
                             type="button"
                             onClick={() => galleryInputRef.current.click()}
-                            className="w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
+                            className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
                               src={icons["src/assets/gallery.svg"]}
@@ -588,7 +588,7 @@ export default function ViewManageDepositModal({
                           <Button
                             type="button"
                             onClick={() => galleryInputRef.current.click()}
-                            className="w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
+                            className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
                               src={icons["src/assets/gallery.svg"]}
@@ -621,14 +621,14 @@ export default function ViewManageDepositModal({
                 <Button
                   type="button"
                   onClick={(e) => handleSubmit(e, "draft")}
-                  className="bg-yellow-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-yellow-700 text-sm sm:text-base"
+                  className="transform hover:scale-105 bg-yellow-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-yellow-700 text-sm sm:text-base"
                   disabled={draftingState || issuingState}
                 >
                   {draftingState ? "Saving Draft..." : "Save as Draft"}
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-green-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-sm sm:text-base"
+                  className="transform hover:scale-105 bg-green-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-sm sm:text-base"
                   disabled={issuingState || draftingState}
                 >
                   {issuingState ? "Issuing Deposit..." : "Issue Deposit"}

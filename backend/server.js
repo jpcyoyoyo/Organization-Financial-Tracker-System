@@ -1966,8 +1966,8 @@ app.post("/fetch-manage-deposits", (req, res) => {
     const data = results.map((deposit) => {
       if (deposit.issued_at !== null) {
         deposit.issued_at = formatDateTableNoTime(deposit.issued_at);
-        deposit.amount = "₱ " + deposit.amount;
       }
+      deposit.amount = "₱ " + deposit.amount;
       return deposit;
     });
 
