@@ -32,6 +32,12 @@ export default function Dashboard() {
       onlineMobile: `${ip}/fetch-online-mobile`,
       totalLogs: `${ip}/fetch-total-logs`,
       logsToday: `${ip}/fetch-logs-today`,
+      currentOrgBal: `${ip}/fetch-current-org-balance`,
+      latestOrgDeposit: `${ip}/fetch-latest-org-deposit`,
+      latestOrgExpense: `${ip}/fetch-latest-org-expense`,
+      yourTotalPaidPayment: `${ip}/fetch-your-total-paid-payment`,
+      yourTotalUnpaidPayment: `${ip}/fetch-your-total-unpaid-payment`,
+      yourServicingPoints: `${ip}/fetch-your-servicing-points`,
     }),
     [ip]
   );
@@ -86,12 +92,42 @@ export default function Dashboard() {
                 : "sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
             } w-full gap-x-3 gap-y-3 md:gap-x-4 md:gap-y-4`}
           >
-            <DataCard title="CURRENT ORG DEPOSIT" />
-            <DataCard title="LATEST ORG DEPOSIT" />
-            <DataCard title="LATEST ORG EXPENSE" />
-            <DataCard title="ACCUMULATED PAYMENT" />
-            <DataCard title="ACCUMULATED DEPOSIT" />
-            <DataCard title="ACCUMULATED EXPENSE" />
+            <DataCard
+              title="CURRENT ORG BALANCE"
+              fetchUrl={fetchUrls.currentOrgBal}
+              id={userData.id}
+              name="current_org_bal"
+            />
+            <DataCard
+              title="LATEST ORG DEPOSIT"
+              fetchUrl={fetchUrls.latestOrgDeposit}
+              id={userData.id}
+              name="latest_org_deposit"
+            />
+            <DataCard
+              title="LATEST ORG EXPENSE"
+              fetchUrl={fetchUrls.latestOrgExpense}
+              id={userData.id}
+              name="latest_org_expense"
+            />
+            <DataCard
+              title="YOUR TOTAL PAID PAYMENT"
+              fetchUrl={fetchUrls.yourTotalPaidPayment}
+              id={userData.id}
+              name="your_total_paid_payment"
+            />
+            <DataCard
+              title="YOUR TOTAL UNPAID PAYMENT"
+              fetchUrl={fetchUrls.yourTotalUnpaidPayment}
+              id={userData.id}
+              name="your_total_unpaid_payment"
+            />
+            <DataCard
+              title="YOUR SERVICING POINTS"
+              fetchUrl={fetchUrls.yourServicingPoints}
+              id={userData.id}
+              name="your_servicing_points"
+            />
           </div>
         </motion.div>
       ) : (

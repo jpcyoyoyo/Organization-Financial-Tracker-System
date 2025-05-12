@@ -2157,8 +2157,6 @@ app.delete("/delete-proof", (req, res) => {
   });
 });
 
-app.use("/proofs", express.static(path.join(__dirname, "proofs")));
-
 app.post("/fetch-deposit-details", (req, res) => {
   const { id } = req.body;
 
@@ -2352,6 +2350,505 @@ app.post("/delete-deposit", async (req, res) => {
       .json({ status: false, error: "Internal Server Error" });
   }
 });
+
+// Route to fetch current organization balance (Total deposit amount - Total expense amount)
+app.post("/fetch-current-org-balance", (req, res) => {
+  // Sum only deposits with status Issued
+  const depositSql =
+    "SELECT IFNULL(SUM(amount),0) AS totalDeposit FROM deposit WHERE status = 'Issued'";
+  const expenseSql =
+    "SELECT IFNULL(SUM(amount),0) AS totalExpense FROM expense";
+
+  oms_db.query(depositSql, (depErr, depResults) => {
+    if (depErr) {
+      console.error("Error fetching deposits:", depErr);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    oms_db.query(expenseSql, (expErr, expResults) => {
+      if (expErr) {
+        console.error("Error fetching expenses:", expErr);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      const totalDeposit = parseFloat(depResults[0].totalDeposit) || 0;
+      const totalExpense = parseFloat(expResults[0].totalExpense) || 0;
+      const currentOrgBalance = totalDeposit - totalExpense;
+      return res.json({
+        status: true,
+        data: { current_org_bal: `₱ ${currentOrgBalance}` },
+      });
+    });
+  });
+});
+
+// Route to fetch the latest issued deposit
+app.post("/fetch-latest-org-deposit", (req, res) => {
+  // Assumes that the latest deposit is determined by issued_at descending.
+  const sql =
+    "SELECT amount FROM deposit WHERE status = 'Issued' ORDER BY issued_at DESC LIMIT 1";
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching latest deposit:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    const deposit = "+ ₱ " + results[0].amount;
+    return res.json({
+      status: true,
+      data: results[0]
+        ? { latest_org_deposit: deposit }
+        : { latest_org_deposit: "₱ 0.00" },
+    });
+  });
+});
+
+// Route to fetch the latest expense
+app.post("/fetch-latest-org-expense", (req, res) => {
+  // Assumes that the latest expense is the one created most recently.
+  const sql =
+    "SELECT amount FROM expense WHERE status = 'Issued' ORDER BY created_at DESC LIMIT 1";
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching latest expense:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    const expense = "- ₱ " + results[0].amount;
+    return res.json({
+      status: true,
+      data: results[0]
+        ? { latest_org_expense: expense }
+        : { latest_org_expense: "₱ 0.00" },
+    });
+  });
+});
+
+// Route to fetch your servicing points (for logged-in user)
+// Expects { id } in req.body.
+app.post("/fetch-your-servicing-points", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "User ID is required" });
+  }
+  const sql =
+    "SELECT servicing_points as your_servicing_points FROM user_account WHERE id = ?";
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching servicing points:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    // Return the servicing_points of the user.
+    return res.json({
+      status: true,
+      data: results[0] ? results[0] : 0,
+    });
+  });
+});
+
+// Route to fetch expenses
+app.post("/fetch-manage-expenses", (req, res) => {
+  // For simplicity, fetching all deposits. You can add filtering as needed.
+  const sql =
+    "SELECT id, name, issued_at, amount, status FROM expense ORDER BY created_at DESC";
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching expensecs:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format issued_at for each deposit if not null.
+    const data = results.map((expense) => {
+      if (expense.issued_at !== null) {
+        expense.issued_at = formatDateTableNoTime(expense.issued_at);
+      }
+      expense.amount = "₱ " + expense.amount;
+      return expense;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+// Route to check if a draft deposit exists
+app.post("/check-draft-expense", (req, res) => {
+  const { user_data, tab } = req.body;
+  if (!user_data || !tab) {
+    return res
+      .status(400)
+      .json({ status: false, error: "User data and tab are required" });
+  }
+  // Assuming deposits with state 'drafting' are drafts
+  const sql = "SELECT id FROM expense WHERE user_id = ? AND status = 'Draft'";
+  const userObj = JSON.parse(user_data);
+  oms_db.query(sql, [userObj.id, tab], (err, results) => {
+    if (err) {
+      console.error("Error checking draft expense:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ hasDraft: results.length > 0 });
+  });
+});
+
+// Route to fetch record groups options for deposit (using query param tab=deposit)
+app.get("/fetch-budget-options", (req, res) => {
+  const sql = "SELECT id, name FROM budget";
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching budget options:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ status: true, data: results });
+  });
+});
+
+// Configure storage for receipts in the "receipts" folder.
+const receiptStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, "receipts"));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
+});
+const receiptUpload = multer({ storage: receiptStorage });
+
+// Route to upload receipt files.
+app.post(
+  "/upload-receipt-image",
+  receiptUpload.array("receiptFile"),
+  (req, res) => {
+    if (!req.files || req.files.length === 0) {
+      return res
+        .status(400)
+        .json({ status: false, error: "No receipt file uploaded" });
+    }
+    const fileNames = req.files.map((file) => file.filename);
+    return res.json({ status: true, fileNames });
+  }
+);
+
+// Route to create a receipt record.
+// Expected fields: type, image, direction, receive_from, receive_to.
+// The newly inserted receipt's id is returned.
+app.post("/create-receipt", (req, res) => {
+  const { user_data, type, image, direction, receive_from, receive_to } =
+    req.body;
+  if (
+    !user_data ||
+    !type ||
+    !image ||
+    !direction ||
+    !receive_from ||
+    !receive_to
+  ) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required receipt fields" });
+  }
+  const userObj = JSON.parse(user_data);
+  const sql = `
+      INSERT INTO receipt (user_id, type, image, direction, receive_from, receive_to)
+      VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  oms_db.query(
+    sql,
+    [userObj.id, type, image, direction, receive_from, receive_to],
+    (err, result) => {
+      if (err) {
+        console.error("Error creating receipt:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      return res.json({ status: true, id: result.insertId });
+    }
+  );
+});
+
+// Modified /create-expense route.
+// This route now expects receipt_ids (as a JSON array string) and, after creating the expense,
+// updates each receipt (in the receipt table) to set relating_id = expense id.
+app.post("/create-expense", (req, res) => {
+  const {
+    user_data,
+    name,
+    breakdown,
+    amount,
+    record_group_id,
+    proof,
+    receipt_ids,
+    status,
+  } = req.body;
+  if (!user_data || !name || !status) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+  const userObj = JSON.parse(user_data);
+  const issuedAtAssignment = status === "Issued" ? "NOW()" : "NULL";
+  const sql = `
+      INSERT INTO expense (user_id, issued_at, name, breakdown, amount, record_group_id, proof, status, receipt_ids)
+      VALUES (?, ${issuedAtAssignment}, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  oms_db.query(
+    sql,
+    [
+      userObj.id,
+      name,
+      breakdown,
+      amount,
+      record_group_id,
+      proof,
+      status,
+      receipt_ids,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Error creating expense:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      const expenseId = result.insertId;
+      // If receipt_ids provided, update each receipt to set relating_id = expenseId.
+      if (receipt_ids) {
+        let ids;
+        try {
+          ids = JSON.parse(receipt_ids);
+          if (!Array.isArray(ids)) {
+            ids = [];
+          }
+        } catch (e) {
+          ids = [];
+        }
+        if (ids.length > 0) {
+          const updateSql = `
+                      UPDATE receipt SET relating_id = ?
+                      WHERE id IN (${ids.map(() => "?").join(",")})
+                  `;
+          console.log("updateSql", updateSql);
+          oms_db.query(
+            updateSql,
+            [expenseId, ...ids],
+            (updateErr, updateResult) => {
+              if (updateErr) {
+                console.error("Error updating receipt relating_id:", updateErr);
+              }
+              return res.json({ status: true, id: expenseId });
+            }
+          );
+        } else {
+          return res.json({ status: true, id: expenseId });
+        }
+      } else {
+        return res.json({ status: true, id: expenseId });
+      }
+    }
+  );
+});
+
+app.get("/fetch-user-options", (req, res) => {
+  const sql =
+    "SELECT student_id, full_name FROM user_account WHERE designation <> 'Admin'";
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching user options:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ status: true, data: results });
+  });
+});
+
+app.post("/delete-receipt", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Receipt id is required." });
+  }
+  // First, fetch the receipt to know the image filename
+  const selectSql = "SELECT image FROM receipt WHERE id = ?";
+  oms_db.query(selectSql, [id], (selectErr, results) => {
+    if (selectErr) {
+      console.error("Error selecting receipt:", selectErr);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Receipt not found." });
+    }
+    const { image } = results[0];
+    // Construct image file path (assuming images are stored in the "receipts" folder)
+    const imagePath = path.join(__dirname, "receipts", image);
+    // Delete the image file if exists
+    fs.unlink(imagePath, (fsErr) => {
+      if (fsErr && fsErr.code !== "ENOENT") {
+        console.error("Error deleting file:", fsErr);
+        // Optionally continue to delete record even if file deletion fails
+      }
+      // Now delete the receipt record from DB
+      const deleteSql = "DELETE FROM receipt WHERE id = ?";
+      oms_db.query(deleteSql, [id], (deleteErr, deleteResult) => {
+        if (deleteErr) {
+          console.error("Error deleting receipt record:", deleteErr);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        return res.json({
+          status: true,
+          message: "Receipt deleted successfully.",
+        });
+      });
+    });
+  });
+});
+
+// FETCH RECEIPT DETAILS ROUTE
+app.post("/fetch-receipt-details", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Receipt id is required." });
+  }
+  const sql = `
+    SELECT 
+      r.id,
+      r.user_id,
+      r.created_at,
+      r.updated_at,
+      r.type,
+      IFNULL(r.relating_id, 'Not Yet Assigned') AS relating_id,
+      r.image,
+      COALESCE(uf.full_name, r.receive_from) AS receive_from_name,
+      CASE WHEN uf.student_id IS NOT NULL THEN 1 ELSE 0 END AS receive_from_comsoc,
+      uf.student_id as receive_from_student_id,
+      COALESCE(ut.full_name, r.receive_to) AS receive_to_name,
+      CASE WHEN ut.student_id IS NOT NULL THEN 1 ELSE 0 END AS receive_to_comsoc,
+      ut.student_id as receive_to_student_id,
+      r.direction,
+      ua.full_name AS full_name,
+      ua.designation AS designation
+    FROM receipt r
+    LEFT JOIN user_account uf ON r.receive_from = uf.student_id
+    LEFT JOIN user_account ut ON r.receive_to = ut.student_id
+    LEFT JOIN user_account ua ON r.user_id = ua.id
+    WHERE r.id = ?
+  `;
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching receipt details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Receipt not found." });
+    }
+    const data = results[0];
+    data.created_at = formatDate(data.created_at);
+    data.updated_at = formatDate(data.updated_at);
+    return res.json({ status: true, receipt: data });
+  });
+});
+
+// Route to delete a receipt image file.
+app.post("/delete-receipt-image", (req, res) => {
+  const { filename } = req.body;
+  if (!filename) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Filename is required" });
+  }
+  const imagePath = path.join(__dirname, "receipts", filename);
+  fs.unlink(imagePath, (err) => {
+    if (err && err.code !== "ENOENT") {
+      console.error("Error deleting receipt image:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "File deletion failed" });
+    }
+    return res.json({
+      status: true,
+      message: "Receipt image deleted successfully.",
+    });
+  });
+});
+
+// Route to update a receipt record.
+app.post("/update-receipt", (req, res) => {
+  const { id, type, image, receive_from, receive_to } = req.body;
+  if (!id || !type || !image || !receive_from || !receive_to) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+  const sql = `
+    UPDATE receipt SET 
+      type = ?,
+      image = ?,
+      receive_from = ?,
+      receive_to = ?
+    WHERE id = ?`;
+  oms_db.query(
+    sql,
+    [type, image, receive_from, receive_to, id],
+    (err, result) => {
+      if (err) {
+        console.error("Error updating receipt:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Receipt not found" });
+      }
+      return res.json({
+        status: true,
+        message: "Receipt updated successfully",
+      });
+    }
+  );
+});
+
+app.use("/proofs", express.static(path.join(__dirname, "proofs")));
+app.use("/documents", express.static(path.join(__dirname, "documents")));
+app.use("/e-signatures", express.static(path.join(__dirname, "e-signatures")));
+app.use(
+  "/qr-codes/attendance",
+  express.static(path.join(__dirname, "qr-codes/attendance"))
+);
+app.use(
+  "/qr-codes/users",
+  express.static(path.join(__dirname, "qr-codes/users"))
+);
+app.use("/receipts", express.static(path.join(__dirname, "receipts")));
 
 // 🔹 Start Express Server
 const PORT = process.env.PORT || 8081;

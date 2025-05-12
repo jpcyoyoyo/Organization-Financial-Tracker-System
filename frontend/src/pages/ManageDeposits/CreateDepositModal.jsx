@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/input";
 import { useOutletContext } from "react-router-dom";
 import { IpContext } from "../../context/IpContext";
 import { icons } from "../../assets/icons";
+import LightboxModal from "../../components/ui/lightboxmodal";
 
 export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
   const [name, setName] = useState("");
@@ -17,28 +18,20 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
   const [recordGroupId, setRecordGroupId] = useState("");
   const [proof, setProof] = useState([]); // store proof file names returned from server
   const [proofPreviews, setProofPreviews] = useState([]); // store local preview URLs
+  const [showLightBox, setShowLightBox] = useState(false);
+  const [uploadingProofs, setUploadingProofs] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
-  // states for submit processing
   const [issuingState, setIssuingState] = useState(false);
   const [draftingState, setDraftingState] = useState(false);
-  // New states for lightbox preview
   const [selectedProof, setSelectedProof] = useState(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState(null);
-
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const ip = useContext(IpContext);
   const { handleShowNotification } = useOutletContext();
   const nameRef = useRef(null);
   const errorRef = useRef(null);
-  const lightboxContainerRef = useRef(null);
-  const lightboxImageRef = useRef(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-
-  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
   // Fetch available record groups for deposit
   const [recordGroups, setRecordGroups] = useState([]);
@@ -87,21 +80,23 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
       })();
 
       // Fetch record group options from a new route
-      (async () => {
-        try {
-          const res = await fetch(
-            `${ip}/fetch-record-groups-options?tab=deposit`
-          );
-          const result = await res.json();
-          if (result.status && Array.isArray(result.data)) {
-            setRecordGroups(result.data);
+      if (!isDraft) {
+        (async () => {
+          try {
+            const res = await fetch(
+              `${ip}/fetch-record-groups-options?tab=deposit`
+            );
+            const result = await res.json();
+            if (result.status && Array.isArray(result.data)) {
+              setRecordGroups(result.data);
+            }
+          } catch (error) {
+            console.error("Error fetching record group options:", error);
           }
-        } catch (error) {
-          console.error("Error fetching record group options:", error);
-        }
-      })();
+        })();
+      }
     }
-  }, [isOpen, ip, userData, onClose]);
+  }, [isOpen, ip, userData, onClose, isDraft]);
 
   // Add a new row to the breakdown table
   const addBreakdownRow = () => {
@@ -120,46 +115,46 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
     });
   };
 
+  const removeBreakdownRow = (index) => {
+    setBreakdown((prev) => {
+      // At least one row remains
+      if (prev.length === 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   // Handle file input change – generate previews and upload files to server
   async function handleProofUpload(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-
-    // Prepare FormData to upload files
-    const formData = new FormData();
-    files.forEach((file) => {
-      console.log("Uploading file:", file.name);
+    for (const file of files) {
+      const uploadingID = `${Date.now()}-${file.name}`;
+      // Add an ID to track this uploading photo.
+      setUploadingProofs((prev) => [...prev, uploadingID]);
+      const formData = new FormData();
       formData.append("proofFiles", file);
-    });
-
-    try {
-      const res = await fetch(`${ip}/upload-proof`, {
-        method: "POST",
-        body: formData,
-      });
-      const result = await res.json();
-      if (result.status && Array.isArray(result.fileNames)) {
-        console.log("Uploaded proof names:", result.fileNames);
-
-        // Use the route to generate the public proofs URL once upload is successful.
-        const uploadedPreviews = result.fileNames.map(
-          (name) => `${ip}/proofs/${name}`
-        );
-
-        // Merge the newly uploaded file names into the proof state.
-        const newProof = [...proof, ...result.fileNames];
-        setProof(newProof);
-
-        // Update proofPreviews to use the actual URLs from the proofs route.
-        setProofPreviews((prev) => [...prev, ...uploadedPreviews]);
-        console.log("Updated proof state:", newProof);
-        handleShowNotification("Proof uploaded successfully.", "success");
-      } else {
-        handleShowNotification("Failed to upload proof.", "error");
+      try {
+        const res = await fetch(`${ip}/upload-proof`, {
+          method: "POST",
+          body: formData,
+        });
+        const result = await res.json();
+        if (
+          result.status &&
+          Array.isArray(result.fileNames) &&
+          result.fileNames.length > 0
+        ) {
+          const fname = result.fileNames[0]; // assuming one file per upload call
+          const previewUrl = `${ip}/proofs/${fname}`;
+          setProof((prev) => [...prev, fname]);
+          setProofPreviews((prev) => [...prev, previewUrl]);
+        }
+      } catch (error) {
+        console.error("Error uploading proof:", error);
+      } finally {
+        // Remove the uploading indicator for this file.
+        setUploadingProofs((prev) => prev.filter((id) => id !== uploadingID));
       }
-    } catch (error) {
-      console.error("Error uploading proof:", error);
-      handleShowNotification("Error uploading proof.", "error");
     }
   }
 
@@ -274,6 +269,10 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
       console.error("Error saving deposit:", error);
       handleShowNotification("Deposit save failed due to an error.", "error");
     } finally {
+      setLoading(true);
+      if (actionType === "editDraft" || actionType === "Draft") {
+        setIsDraft(true);
+      }
       setIssuingState(false);
       setDraftingState(false);
     }
@@ -329,92 +328,15 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
       onClose();
     }
   }
-
   // Open lightbox with clicked preview
   const openLightbox = (url) => {
     setSelectedProof(url);
-    setZoomLevel(1);
   };
 
   // Close lightbox overlay
   const closeLightbox = () => {
     setSelectedProof(null);
-    setZoomLevel(1);
-  };
-
-  // Mouse event handlers for panning
-  const handleMouseDown = (e) => {
-    if (zoomLevel <= 1) return; // no panning if not zoomed in
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
-
-  const handleMouseMove = (e) => {
-    if (
-      !dragStart ||
-      !lightboxContainerRef.current ||
-      !lightboxImageRef.current
-    )
-      return;
-    const container = lightboxContainerRef.current;
-    const image = lightboxImageRef.current;
-    // Calculate new potential pan offsets
-    let newPan = {
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
-    };
-    // Get container dimensions
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    // Get image dimensions (base size) and scale them
-    const imageWidth = image.clientWidth * zoomLevel;
-    const imageHeight = image.clientHeight * zoomLevel;
-    // Compute max allowed offset so that the image border does not go outside container
-    const maxPanX = Math.max(0, (imageWidth - containerWidth) / 2);
-    const maxPanY = Math.max(0, (imageHeight - containerHeight) / 2);
-    // Clamp newPan accordingly
-    newPan.x = clamp(newPan.x, -maxPanX, maxPanX);
-    newPan.y = clamp(newPan.y, -maxPanY, maxPanY);
-    setPan(newPan);
-  };
-
-  const handleMouseUp = () => {
-    setDragStart(null);
-  };
-
-  // Touch event handlers for mobile panning
-  const handleTouchStart = (e) => {
-    if (zoomLevel <= 1) return;
-    const touch = e.touches[0];
-    setDragStart({ x: touch.clientX - pan.x, y: touch.clientY - pan.y });
-  };
-
-  const handleTouchMove = (e) => {
-    if (
-      !dragStart ||
-      !lightboxContainerRef.current ||
-      !lightboxImageRef.current
-    )
-      return;
-    const touch = e.touches[0];
-    const container = lightboxContainerRef.current;
-    const image = lightboxImageRef.current;
-    let newPan = {
-      x: touch.clientX - dragStart.x,
-      y: touch.clientY - dragStart.y,
-    };
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    const imageWidth = image.clientWidth * zoomLevel;
-    const imageHeight = image.clientHeight * zoomLevel;
-    const maxPanX = Math.max(0, (imageWidth - containerWidth) / 2);
-    const maxPanY = Math.max(0, (imageHeight - containerHeight) / 2);
-    newPan.x = clamp(newPan.x, -maxPanX, maxPanX);
-    newPan.y = clamp(newPan.y, -maxPanY, maxPanY);
-    setPan(newPan);
-  };
-
-  const handleTouchEnd = () => {
-    setDragStart(null);
+    setShowLightBox(false);
   };
 
   if (!isOpen) return null;
@@ -483,8 +405,9 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                           <th className="text-left p-1 px-2 w-3/5 rounded-tl-lg">
                             Name
                           </th>
-                          <th className="text-left p-1 px-2 w-2/5 rounded-tr-lg">
-                            Amount
+                          <th className="text-left p-1 px-2 w-2/5">Amount</th>
+                          <th className="text-left p-1 px-2 w-1/5 rounded-tr-lg ">
+                            Action
                           </th>
                         </tr>
                       </thead>
@@ -492,7 +415,7 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                         {breakdown.map((row, index) => (
                           <tr
                             key={index}
-                            className="border-b text-xs sm:text-sm"
+                            className="border-b text-xs sm:text-sm h-8.5"
                           >
                             <td className="p-1">
                               <Input
@@ -524,6 +447,25 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                                 className="w-full"
                                 step="0.01"
                               />
+                            </td>
+                            <td className="p-1 text-center">
+                              {breakdown.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => removeBreakdownRow(index)}
+                                  className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                >
+                                  {isMobile ? (
+                                    <img
+                                      src={icons["src/assets/delete.svg"]}
+                                      alt="Remove row"
+                                      className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
+                                    />
+                                  ) : (
+                                    <p>Remove</p>
+                                  )}
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -559,7 +501,10 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                             src={url}
                             alt="Proof preview"
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 object-cover rounded cursor-pointer border-2"
-                            onClick={() => openLightbox(url)}
+                            onClick={() => {
+                              openLightbox(url);
+                              setShowLightBox(true);
+                            }}
                           />
                           <Button
                             type="button"
@@ -571,12 +516,41 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                         </div>
                       );
                     })}
+                    {uploadingProofs.map((id) => (
+                      <div
+                        key={id}
+                        className="flex flex-col w-20 h-20 bg-gray-200 rounded items-center justify-center border-2 border-dashed"
+                      >
+                        <div className="mt-2 animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                        <p className="mt-2 text-xs text-gray-700">
+                          Uploading...
+                        </p>
+                      </div>
+                    ))}
                     {isMobile ? (
                       <>
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => cameraInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                cameraInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-blue-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -590,7 +564,25 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => galleryInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                galleryInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -627,7 +619,25 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => galleryInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                galleryInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -685,65 +695,13 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
           </div>
         )}
       </Modal>
-      {/* Lightbox overlay */}
-      {selectedProof && (
-        // Use Modal component for the lightbox overlay
-        <Modal
-          isOpen={true}
+      {selectedProof && showLightBox && (
+        <LightboxModal
+          isOpen={showLightBox}
           onClose={closeLightbox}
-          w={"w-11/12 h-11/12 md:h-6/7 md:w-4/7 lg:w-3/7 xl:w-3/7"}
-          modalCenter={false}
-          title="IMAGE PREVIEW"
-        >
-          <div
-            ref={lightboxContainerRef}
-            className="h-full w-full relative cursor-move select-none"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          >
-            <div className="p-2 md:p-5 w-full h-9/10 flex items-center justify-center overflow-hidden">
-              <img
-                ref={lightboxImageRef}
-                src={selectedProof}
-                alt="Enlarged proof"
-                style={{
-                  transform: `scale(${zoomLevel}) translate(${pan.x}px, ${pan.y}px)`,
-                  transition: dragStart ? "none" : "transform 0.2s",
-                }}
-                className="place-center max-w-full max-h-full object-contain border-2 border-gray-300 rounded-lg"
-              />
-            </div>
-            {/* Show zoom slider only on non-mobile */}
-            {!isMobile && (
-              <div className="h-1/10 p-2 flex items-center justify-center bg-black bg-opacity-50">
-                <input
-                  type="range"
-                  min="1"
-                  max="3"
-                  step="0.01"
-                  value={zoomLevel}
-                  onChange={(e) => {
-                    const newZoom = Number(e.target.value);
-                    // Adjust pan so that the current center stays fixed:
-                    // newPan = currentPan * (oldZoom / newZoom)
-                    const adjustedPan = {
-                      x: pan.x * (zoomLevel / newZoom),
-                      y: pan.y * (zoomLevel / newZoom),
-                    };
-                    setZoomLevel(newZoom);
-                    setPan(adjustedPan);
-                  }}
-                  className="w-full"
-                />
-              </div>
-            )}
-          </div>
-        </Modal>
+          selectedProof={selectedProof}
+          isMobile={isMobile}
+        />
       )}
     </>
   );

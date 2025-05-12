@@ -5,7 +5,7 @@ import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
 
-export default function DeleteDepositModal({
+export default function DeleteExpenseModal({
   isOpen,
   onClose,
   onGoBack,
@@ -46,7 +46,7 @@ export default function DeleteDepositModal({
   return (
     <>
       <Modal
-        title="DELETE DEPOSIT"
+        title="DELETE ACCOUNT"
         isOpen={isOpen}
         onClose={onClose}
         w="w-11/12 md:h-2/5 md:w-5/9 xl:w-1/3"
@@ -77,7 +77,7 @@ export default function DeleteDepositModal({
   );
 }
 
-DeleteDepositModal.propTypes = {
+DeleteExpenseModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,

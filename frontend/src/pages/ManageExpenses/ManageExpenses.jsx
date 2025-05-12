@@ -1,52 +1,61 @@
 import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/maincontent";
-import SearchTableCard from "../../components/ui/searchtablecard";
-import ViewManageExpenseModal from "./ViewManageExpenseModal";
+import SearchListCard from "../../components/ui/searchlistcard";
 import { useContext } from "react";
+import CreateExpenseModal from "./CreateExpenseModal";
+import ViewManageExpenseModal from "./ViewManageExpenseModal";
+import UpdateExpenseModal from "./UpdateExpenseModal";
+import DeleteExpenseModal from "./DeleteExpenseModal";
 import { IpContext } from "../../context/IpContext";
 
-const tableConfig = {
-  createButton: { iconUrl: "src/assets/react.svg", name: "Deposit" },
+const listConfig = {
+  createButton: {
+    iconUrl: "src/assets/react.svg",
+    name: "Create Expense",
+  },
   columns: [
+    { type: "hidden", name: "id" },
     { type: "icon", iconUrl: "src/assets/react.svg" },
     {
-      type: "data",
-      header: "AMOUNT",
-      w_expand: "w-7/15 lg:w-4/14",
-      w_collapse: "w-2/5 sm:w-2/5 md:w-2/6 lg:w-4/14",
-      alignment: "justify-start",
-      text_size:
-        "font-bold sm:text-lg md:text-xl xl:text-2xl md:pl-1.5 xl:pl-3",
+      type: "double",
+      w_expand: "w-full md:w-8/15 lg:w-6/12",
+      w_collapse: "w-full md:w-5/7 lg:w-4/7",
+      variables: [
+        {
+          key: "",
+          name: "name",
+          mobile: true,
+          nameStyle: "font-semibold text-base",
+        },
+        {
+          key: "",
+          name: "amount",
+          mobile: true,
+          nameStyle: "font-normal text-sm",
+        },
+      ],
       mobile: true,
-      name: "amount",
     },
     {
-      type: "data",
-      header: "DATE RECORDED",
-      w_expand: "w-1/2 lg:w-5/14",
-      w_collapse: "w-3/5 sm:w-3/5 md:w-2/6 lg:w-5/14",
-      alignment: "justify-center",
-      text_size: "text-sm md:text-base",
+      type: "single",
+      w_expand: "w-7/15 lg:w-4/12",
+      w_collapse: "md:w-2/7 lg:lg:w-2/7",
+      key: "Date Issued",
+      name: "issued_at",
       mobile: true,
-      name: "date",
+      default: "Not Yet Issued",
     },
     {
-      type: "data",
-      header: "SOURCE",
-      w_expand: "hidden lg:block w-7/15 lg:w-5/14",
-      w_collapse: "hidden md:block md:w-2/6 lg:w-5/14",
-      alignment: "justify-center",
-      mobile: false,
-      text_size: "text-sm md:text-base",
-      name: "category",
+      type: "single",
+      w_expand: "w-7/15 lg:w-2/12",
+      w_collapse: "md:w-2/7 lg:lg:w-1/7",
+      key: "Status",
+      name: "status",
+      mobile: true,
+      default: "Status",
     },
-    { type: "hidden", name: "id" },
-    { type: "action", name: "View", iconUrl: "src/assets/react.svg" },
   ],
 };
-
-const userData = JSON.stringify(sessionStorage.getItem("user"));
-const itemsPerPage = 7;
 
 export default function ManageExpenses() {
   const { isCollapsed } = useOutletContext();
@@ -54,16 +63,50 @@ export default function ManageExpenses() {
 
   const testData = {
     data: [
-      { id: 1, dateRecorded: "2023-08-01", amount: "1,000,000.00" },
-      { id: 2, dateRecorded: "2023-07-15", amount: "1000.00" },
-      { id: 3, dateRecorded: "2023-08-01", amount: "1000.00" },
-      { id: 4, dateRecorded: "2023-07-15", amount: "1000.00" },
-      { id: 5, dateRecorded: "2023-08-01", amount: "1000.00" },
-      { id: 6, dateRecorded: "2023-07-15", amount: "1000.00" },
-      { id: 7, dateRecorded: "2023-08-01", amount: "1000.00" },
-      { id: 8, dateRecorded: "2023-07-15", amount: "1000.00" },
+      {
+        id: 1,
+        name: "EXPENSE-20250504-00001",
+        amount: "$1,000",
+        issued_at: "Not Yet Issued",
+        status: "Draft",
+      },
+      {
+        id: 2,
+        name: "EXPENSE-20250504-00002",
+        amount: "$2,000",
+        issued_at: "2021-01-01",
+        status: "Issued",
+      },
+      {
+        id: 3,
+        name: "EXPENSE-20250504-00003",
+        amount: "$1,000",
+        issued_at: "2021-01-01",
+        status: "Issued",
+      },
+      {
+        id: 4,
+        name: "EXPENSE-20250504-00004",
+        amount: "$2,000",
+        issued_at: "2021-01-01",
+        status: "Issued",
+      },
+      {
+        id: 5,
+        name: "EXPENSE-20250504-00005",
+        amount: "$1,000",
+        issued_at: "2021-01-01",
+        status: "Issued",
+      },
+      {
+        id: 6,
+        name: "EXPENSE-20250504-00006",
+        amount: "$1,000",
+        issued_at: "2021-01-01",
+        status: "Issued",
+      },
     ],
-    years: [2021, 2022, 2023],
+    years: [2021],
   };
 
   return (
@@ -73,16 +116,17 @@ export default function ManageExpenses() {
       textFormat="text-3xl pt-1"
       showContentNameMobileOnly={true}
     >
-      <SearchTableCard
+      <SearchListCard
         cardName="EXPENSE MANAGEMENT"
-        userData={userData}
-        tableConfig={tableConfig}
-        fetchUrl={`${ip}/fetch-expenses`}
+        listConfig={listConfig}
+        fetchUrl={`${ip}/fetch-manage-expenses`}
         isCollapsed={isCollapsed}
-        viewModal={ViewManageExpenseModal}
         testMode={false}
         testData={testData}
-        itemsPerPage={itemsPerPage}
+        createModal={CreateExpenseModal}
+        viewModal={ViewManageExpenseModal}
+        updateModal={UpdateExpenseModal}
+        deleteModal={DeleteExpenseModal}
       />
     </MainContent>
   );

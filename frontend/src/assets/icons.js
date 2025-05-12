@@ -6,6 +6,7 @@ import webOnline from "./web_online.svg";
 import server from "./server.png";
 import gallery from "./gallery.svg";
 import photo from "./photo.svg";
+import deleteIcon from "./delete.svg";
 // ...import other icons if needed
 
 export const icons = {
@@ -17,4 +18,5 @@ export const icons = {
   "src/assets/server.svg": server,
   "src/assets/gallery.svg": gallery,
   "src/assets/photo.svg": photo,
+  "src/assets/delete.svg": deleteIcon,
 };

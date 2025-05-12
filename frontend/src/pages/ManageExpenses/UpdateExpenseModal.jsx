@@ -7,7 +7,7 @@ import { IpContext } from "../../context/IpContext";
 import { icons } from "../../assets/icons";
 import LightboxModal from "../../components/ui/lightboxmodal";
 
-export default function UpdateDepositModal({
+export default function UpdateExpenseModal({
   isOpen,
   id,
   onClose,
@@ -122,14 +122,6 @@ export default function UpdateDepositModal({
       return updated;
     });
   }
-
-  const removeBreakdownRow = (index) => {
-    setBreakdown((prev) => {
-      // At least one row remains
-      if (prev.length === 1) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
-  };
 
   // Handle proof upload
   async function handleProofUpload(e) {
@@ -339,22 +331,14 @@ export default function UpdateDepositModal({
                 <div className="border rounded-lg">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-lime-400 border-b text-sm sm:text-base">
-                        <th className="text-left p-1 px-2 w-3/5 rounded-tl-lg">
-                          Name
-                        </th>
+                      <tr className="bg-lime-400 border-b text-sm">
+                        <th className="text-left p-1 px-2 w-3/5">Name</th>
                         <th className="text-left p-1 px-2 w-2/5">Amount</th>
-                        <th className="text-left p-1 px-2 w-1/5 rounded-tr-lg ">
-                          Action
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {breakdown.map((row, index) => (
-                        <tr
-                          key={index}
-                          className="border-b text-xs sm:text-sm h-8.5"
-                        >
+                        <tr key={index} className="border-b text-xs">
                           <td className="p-1">
                             <Input
                               type="text"
@@ -385,25 +369,6 @@ export default function UpdateDepositModal({
                               className="w-full"
                               step="0.01"
                             />
-                          </td>
-                          <td className="p-1 text-center">
-                            {breakdown.length > 1 && (
-                              <Button
-                                type="button"
-                                onClick={() => removeBreakdownRow(index)}
-                                className="bg-red-500 text-white px-2 py-1 rounded text-xs"
-                              >
-                                {isMobile ? (
-                                  <img
-                                    src={icons["src/assets/delete.svg"]}
-                                    alt="Remove row"
-                                    className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
-                                  />
-                                ) : (
-                                  <p>Remove</p>
-                                )}
-                              </Button>
-                            )}
                           </td>
                         </tr>
                       ))}
@@ -625,7 +590,7 @@ export default function UpdateDepositModal({
   );
 }
 
-UpdateDepositModal.propTypes = {
+UpdateExpenseModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),

@@ -28,6 +28,7 @@ export default function ViewManageDepositModal({
   const [recordGroupId, setRecordGroupId] = useState("");
   const [proof, setProof] = useState([]);
   const [proofPreviews, setProofPreviews] = useState([]);
+  const [uploadingProofs, setUploadingProofs] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [showUpdate, setShowUpdate] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -83,24 +84,18 @@ export default function ViewManageDepositModal({
           if (result.status && result.data) {
             const data = result.data;
             setDetails(data);
-            // Set isDraft based on data.status
             if (data.status === "Draft") {
               setIsDraft(true);
-              // Pre-populate form inputs with data for editing a draft
               setName(data.name);
               setRecordGroupId(data.record_group_id);
-              // Assume breakdown is stored as JSON string.
               setBreakdown(JSON.parse(data.breakdown));
-              // Set proof and proofPreviews from stored data
               setProof(JSON.parse(data.proof));
-              // Construct the public URL for each proof image
               const previews = JSON.parse(data.proof).map(
                 (fname) => `${ip}/proofs/${fname}`
               );
               setProofPreviews(previews);
             } else {
               setProof(JSON.parse(data.proof));
-              // Construct the public URL for each proof image
               const previews = JSON.parse(data.proof).map(
                 (fname) => `${ip}/proofs/${fname}`
               );
@@ -149,46 +144,46 @@ export default function ViewManageDepositModal({
     });
   };
 
+  const removeBreakdownRow = (index) => {
+    setBreakdown((prev) => {
+      // At least one row remains
+      if (prev.length === 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   // Handle file input change – generate previews and upload files to server
   async function handleProofUpload(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-
-    // Prepare FormData to upload files
-    const formData = new FormData();
-    files.forEach((file) => {
-      console.log("Uploading file:", file.name);
+    for (const file of files) {
+      const uploadingID = `${Date.now()}-${file.name}`;
+      // Add an ID to track this uploading photo.
+      setUploadingProofs((prev) => [...prev, uploadingID]);
+      const formData = new FormData();
       formData.append("proofFiles", file);
-    });
-
-    try {
-      const res = await fetch(`${ip}/upload-proof`, {
-        method: "POST",
-        body: formData,
-      });
-      const result = await res.json();
-      if (result.status && Array.isArray(result.fileNames)) {
-        console.log("Uploaded proof names:", result.fileNames);
-
-        // Use the route to generate the public proofs URL once upload is successful.
-        const uploadedPreviews = result.fileNames.map(
-          (name) => `${ip}/proofs/${name}`
-        );
-
-        // Merge the newly uploaded file names into the proof state.
-        const newProof = [...proof, ...result.fileNames];
-        setProof(newProof);
-
-        // Update proofPreviews to use the actual URLs from the proofs route.
-        setProofPreviews((prev) => [...prev, ...uploadedPreviews]);
-        console.log("Updated proof state:", newProof);
-        handleShowNotification("Proof uploaded successfully.", "success");
-      } else {
-        handleShowNotification("Failed to upload proof.", "error");
+      try {
+        const res = await fetch(`${ip}/upload-proof`, {
+          method: "POST",
+          body: formData,
+        });
+        const result = await res.json();
+        if (
+          result.status &&
+          Array.isArray(result.fileNames) &&
+          result.fileNames.length > 0
+        ) {
+          const fname = result.fileNames[0]; // assuming one file per upload call
+          const previewUrl = `${ip}/proofs/${fname}`;
+          setProof((prev) => [...prev, fname]);
+          setProofPreviews((prev) => [...prev, previewUrl]);
+        }
+      } catch (error) {
+        console.error("Error uploading proof:", error);
+      } finally {
+        // Remove the uploading indicator for this file.
+        setUploadingProofs((prev) => prev.filter((id) => id !== uploadingID));
       }
-    } catch (error) {
-      console.error("Error uploading proof:", error);
-      handleShowNotification("Error uploading proof.", "error");
     }
   }
 
@@ -296,7 +291,10 @@ export default function ViewManageDepositModal({
         );
         if (refreshData) refreshData();
         resetForm();
-        onClose();
+
+        if (actionType !== "draftExit") {
+          onClose();
+        }
       } else {
         handleShowNotification(result.error || "Deposit save failed.", "error");
       }
@@ -351,11 +349,24 @@ export default function ViewManageDepositModal({
 
   // onClose handler: automatically save draft when user exits modal
   function handleClose(e) {
-    if (e) {
-      handleSubmit(e, "draftExit");
+    // If no event is passed (e.g. when closing via header), create a dummy event.
+    const event = e || { preventDefault: () => {} };
+    if (name.trim()) {
+      handleSubmit(event, "draftExit");
+      onClose();
+    } else {
+      onClose();
     }
-    onClose();
   }
+
+  const handleDeleteDraft = () => {
+    // If deposit is a draft, simply close the view modal without saving the draft.
+    onClose();
+    // Wait a moment then show the delete modal.
+    setTimeout(() => {
+      setShowDelete(true);
+    }, 300);
+  };
 
   // Open lightbox with clicked preview
   const openLightbox = (url) => {
@@ -443,8 +454,9 @@ export default function ViewManageDepositModal({
                           <th className="text-left p-1 px-2 w-3/5 rounded-tl-lg">
                             Name
                           </th>
-                          <th className="text-left p-1 px-2 w-2/5 rounded-tr-lg">
-                            Amount
+                          <th className="text-left p-1 px-2 w-2/5">Amount</th>
+                          <th className="text-left p-1 px-2 w-1/5 rounded-tr-lg ">
+                            Action
                           </th>
                         </tr>
                       </thead>
@@ -452,7 +464,7 @@ export default function ViewManageDepositModal({
                         {breakdown.map((row, index) => (
                           <tr
                             key={index}
-                            className="border-b text-xs sm:text-sm"
+                            className="border-b text-xs sm:text-sm h-8.5"
                           >
                             <td className="p-1">
                               <Input
@@ -484,6 +496,25 @@ export default function ViewManageDepositModal({
                                 className="w-full"
                                 step="0.01"
                               />
+                            </td>
+                            <td className="p-1 text-center">
+                              {breakdown.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => removeBreakdownRow(index)}
+                                  className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                >
+                                  {isMobile ? (
+                                    <img
+                                      src={icons["src/assets/delete.svg"]}
+                                      alt="Remove row"
+                                      className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
+                                    />
+                                  ) : (
+                                    <p>Remove</p>
+                                  )}
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -519,7 +550,10 @@ export default function ViewManageDepositModal({
                             src={url}
                             alt="Proof preview"
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 object-cover rounded cursor-pointer border-2"
-                            onClick={() => openLightbox(url)}
+                            onClick={() => {
+                              openLightbox(url);
+                              setShowLightBox(true);
+                            }}
                           />
                           <Button
                             type="button"
@@ -531,12 +565,41 @@ export default function ViewManageDepositModal({
                         </div>
                       );
                     })}
+                    {uploadingProofs.map((id) => (
+                      <div
+                        key={id}
+                        className="flex flex-col w-20 h-20 bg-gray-200 rounded items-center justify-center border-2 border-dashed"
+                      >
+                        <div className="mt-2 animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                        <p className="mt-2 text-xs text-gray-700">
+                          Uploading...
+                        </p>
+                      </div>
+                    ))}
                     {isMobile ? (
                       <>
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => cameraInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                cameraInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-blue-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -550,7 +613,25 @@ export default function ViewManageDepositModal({
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => galleryInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                galleryInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -587,7 +668,25 @@ export default function ViewManageDepositModal({
                         <div className="relative inline-block">
                           <Button
                             type="button"
-                            onClick={() => galleryInputRef.current.click()}
+                            onClick={() => {
+                              if (
+                                !name.trim() ||
+                                !recordGroupId ||
+                                breakdown.every(
+                                  (row) =>
+                                    row.breakdownName.trim() === "" &&
+                                    row.breakdownAmount.trim() === ""
+                                )
+                              ) {
+                                setErrorMsg(
+                                  "Please fill in deposit name, source, and at least one breakdown row before uploading proofs."
+                                );
+                              } else {
+                                // Clear any previous error and trigger camera input.
+                                setErrorMsg("");
+                                galleryInputRef.current.click();
+                              }
+                            }}
                             className="transition-all duration-150 transform hover:scale-105 w-20 h-20 flex flex-col items-center justify-center bg-gray-600 text-white rounded cursor-pointer"
                           >
                             <img
@@ -617,22 +716,31 @@ export default function ViewManageDepositModal({
                   </p>
                 )}
               </div>
-              <div className="flex justify-end items-center space-x-4 mt-4 h-1/10">
+              <div className="flex justify-end items-center space-x-2 mt-4 h-1/10">
                 <Button
                   type="button"
                   onClick={(e) => handleSubmit(e, "draft")}
-                  className="transform hover:scale-105 bg-yellow-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-yellow-700 text-sm sm:text-base"
+                  className="transform hover:scale-105 bg-yellow-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-yellow-700 text-xs sm:text-sm md:text-base"
                   disabled={draftingState || issuingState}
                 >
                   {draftingState ? "Saving Draft..." : "Save as Draft"}
                 </Button>
                 <Button
                   type="submit"
-                  className="transform hover:scale-105 bg-green-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-sm sm:text-base"
+                  className="transform hover:scale-105 bg-green-600 text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-xs sm:text-sm md:text-base"
                   disabled={issuingState || draftingState}
                 >
                   {issuingState ? "Issuing Deposit..." : "Issue Deposit"}
                 </Button>
+                {DeleteModal && (
+                  <Button
+                    type="button"
+                    onClick={handleDeleteDraft}
+                    className="bg-red-600 hover:bg-red-800 text-xs sm:text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center"
+                  >
+                    <span>Delete</span>
+                  </Button>
+                )}
               </div>
             </form>
           </>
@@ -672,7 +780,7 @@ export default function ViewManageDepositModal({
                             {JSON.parse(details.breakdown).map((row, idx) => (
                               <tr
                                 key={idx}
-                                className="flex w-full text-xs md:text-sm border-b"
+                                className="flex w-full text-xs md:text-sm border-b h-8.5"
                               >
                                 <td className="w-2/3 p-1">
                                   {row.breakdownName}

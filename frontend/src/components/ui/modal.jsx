@@ -44,7 +44,7 @@ export default function Modal({
         animate={isVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className={`transition-all duration-300 bg-white rounded-xl shadow-lg p-4 pt-15 ${w} max-w-7xl relative`}
+        className={`transition-all duration-300 bg-white rounded-xl shadow-lg p-2 pt-15 ${w} max-w-7xl relative`}
       >
         <div className="absolute top-0 left-0 flex flex-row h-11 w-full">
           <Button

@@ -485,7 +485,7 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 1 }}
-              className="h-107.5 md:h-112"
+              className="h-107.5 md:h-112 flex items-center justify-center"
             >
               <p className="text-sm text-gray-600">{loadingMessage}</p>
             </motion.div>
