@@ -1,12 +1,20 @@
 import { useState, useEffect, useContext, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
+import { useOutletContext } from "react-router-dom";
 import { IpContext } from "../../context/IpContext";
 import { motion } from "framer-motion";
 import backIcon from "../../assets/prev.svg";
+import Modal from "../../components/ui/modal";
 import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
 
-export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
+export default function ViewDraftBudgetModal({
+  isOpen,
+  onClose,
+  id,
+  refreshData,
+}) {
+  const { handleShowNotification } = useOutletContext();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -23,6 +31,8 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   const [includePayments, setIncludePayments] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const errorRef = useRef(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const userData = sessionStorage.getItem("user");
   const [approvalHistory, setApprovalHistory] = useState([]);
   const [approvalHistoryError, setApprovalHistoryError] = useState("");
   const [selectedApproval, setSelectedApproval] = useState(null);
@@ -132,6 +142,79 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
       .reduce((acc, payment) => acc + (parseFloat(payment.amount) || 0), 0)
       .toFixed(2);
 
+  const cancelBudgetApproval = async () => {
+    try {
+      const response = await fetch(`${ip}/cancel-budget-approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          approval_id: details.approval_id,
+          user_data: userData,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to cancel approval");
+      }
+      const result = await response.json();
+      if (result.status) {
+        handleShowNotification(
+          "Budget approval cancelled successfully",
+          "success"
+        );
+        setShowCancelModal(false);
+        refreshData();
+        onClose();
+      } else {
+        handleShowNotification(result.error || "Cancellation failed", "error");
+        setShowCancelModal(false);
+        refreshData();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Error cancelling approval:", error);
+      handleShowNotification("Error cancelling approval", "error");
+      setShowCancelModal(false);
+      refreshData();
+      onClose();
+    }
+  };
+
+  const publishBudget = async () => {
+    try {
+      const response = await fetch(`${ip}/publish-budget`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          approval_id: details.approval_id,
+          payments: payments,
+          user_data: userData,
+          approved_at: details.approved_at_orig,
+          include_payment: details.include_payment.data[0] === 1 ? true : false,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to publish budget");
+      }
+      const result = await response.json();
+      if (result.status) {
+        handleShowNotification("Budget published successfully", "success");
+        refreshData();
+        onClose();
+      } else {
+        handleShowNotification(result.error || "Publish failed", "error");
+        refreshData();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Error publishing budget:", error);
+      handleShowNotification("Error publishing budget", "error");
+      refreshData();
+      onClose();
+    }
+  };
+
   if (!isOpen && !isVisible) return null;
   return (
     <>
@@ -209,7 +292,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                     <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                       <div>
                         <label className="flex font-semibold">
-                          Budget Amount
+                          Tentative Budget Amount
                         </label>
                         <div className="text-2xl">
                           ₱ {calculateOverallBudgetTotal()}
@@ -314,6 +397,29 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                   </div>
                 </motion.div>
               </div>
+              {!details.published_at && (
+                <div className="flex justify-end items-center space-x-2 h-1/10">
+                  {details && details.status === "Ready to Publish" ? (
+                    <Button
+                      type="button"
+                      onClick={publishBudget}
+                      className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded h-fit"
+                    >
+                      Publish Budget
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setShowCancelModal(true);
+                      }}
+                      className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-gray-800 bg-gray-600 text-white px-4 py-2 rounded h-fit"
+                    >
+                      Cancel Approval
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-4 h-9/10 w-full flex items-center justify-center">
@@ -673,9 +779,67 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
               <p>Fail to fetch details</p>
             </div>
           )}
+          {isMobile && !details.published_at && (
+            <div className="flex justify-end items-center space-x-2 p-4">
+              {details && details.status === "Ready to Publish" ? (
+                <Button
+                  type="button"
+                  onClick={publishBudget}
+                  className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded h-fit"
+                >
+                  Publish Budget
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelModal(true);
+                  }}
+                  className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-gray-800 bg-gray-600 text-white px-4 py-2 rounded h-fit"
+                >
+                  Cancel Approval
+                </Button>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
-
+      {showCancelModal && (
+        <Modal
+          title="CONFIRM CANCEL"
+          isOpen={showCancelModal}
+          onClose={() => {
+            setShowCancelModal(false);
+          }}
+          modalCenter={true}
+          w={"w-11/12 h-11/12 md:h-2/5 md:w-4/7 lg:w-3/7 xl:w-2/7"}
+        >
+          <div className="p-4 h-6/9 flex justify-center">
+            <p className="text-lg text-gray-800">
+              Are you sure you want to cancel the budget approval? The planned
+              budget will go back to draft if you cancel.
+            </p>
+          </div>
+          <div className="flex justify-end space-x-2 h-2/9 p-4">
+            <Button
+              type="button"
+              onClick={() => {
+                setShowCancelModal(false);
+              }}
+              className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-gray-800 bg-gray-400 text-white px-4 py-2 rounded h-fit"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => cancelBudgetApproval()}
+              className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-purple-800 bg-purple-600 text-white px-4 py-2 rounded h-fit"
+            >
+              Confirm Cancellation
+            </Button>
+          </div>
+        </Modal>
+      )}
       {showApprovalModal && selectedApproval && (
         <ApprovalDetailsModal
           isOpen={showApprovalModal}
@@ -690,7 +854,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   );
 }
 
-ViewBudgetModal.propTypes = {
+ViewDraftBudgetModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,

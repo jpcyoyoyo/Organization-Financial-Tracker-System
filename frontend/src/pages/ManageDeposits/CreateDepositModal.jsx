@@ -453,13 +453,13 @@ export default function CreateDepositModal({ isOpen, onClose, refreshData }) {
                                 <Button
                                   type="button"
                                   onClick={() => removeBreakdownRow(index)}
-                                  className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                  className="transition-all duration-150 transform hover:scale-105 bg-red-500 text-white px-2 py-1 rounded text-xs cursor-pointer"
                                 >
                                   {isMobile ? (
                                     <img
                                       src={icons["src/assets/delete.svg"]}
                                       alt="Remove row"
-                                      className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
+                                      className="w-4 h-4 object-cover rounded"
                                     />
                                   ) : (
                                     <p>Remove</p>

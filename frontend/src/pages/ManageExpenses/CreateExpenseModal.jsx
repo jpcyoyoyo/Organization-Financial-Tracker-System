@@ -7,6 +7,9 @@ import { useOutletContext } from "react-router-dom";
 import { IpContext } from "../../context/IpContext";
 import { icons } from "../../assets/icons";
 import LightboxModal from "../../components/ui/lightboxmodal";
+import AddReceiptModal from "../Receipts/AddReceiptModal";
+import ViewReceiptModal from "../Receipts/ViewReceiptModal";
+import UpdateReceiptModal from "../Receipts/UpdateReceiptModal";
 
 export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
   const [name, setName] = useState("");
@@ -22,7 +25,6 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
   const [showLightBox, setShowLightBox] = useState(false);
   const [uploadingProofs, setUploadingProofs] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
-  const [receiptErrorMsg, setReceiptErrorMsg] = useState("");
   const [issuingState, setIssuingState] = useState(false);
   const [draftingState, setDraftingState] = useState(false);
   const [selectedProof, setSelectedProof] = useState(null);
@@ -32,10 +34,8 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
   const { handleShowNotification } = useOutletContext();
   const nameRef = useRef(null);
   const errorRef = useRef(null);
-  const receiptErrorRef = useRef(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const receiptInputRef = useRef(null);
   const keyLockRef = useRef(false);
 
   // Fetch available record groups for expense
@@ -46,28 +46,17 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
   const [receiptIDs, setReceiptIDs] = useState([]);
   const [receiptPreviews, setReceiptPreviews] = useState([]);
   const [showAddReceiptModal, setShowAddReceiptModal] = useState(false);
-  const [receiptImage, setReceiptImage] = useState(null);
-  const [receiptImagePreview, setReceiptImagePreview] = useState("");
-  const [receiptFrom, setReceiptFrom] = useState("");
-  const [receiptTo, setReceiptTo] = useState("");
-  const [receiptFromComsoc, setReceiptFromComsoc] = useState(false);
-  const [receiptToComsoc, setReceiptToComsoc] = useState(false);
-  const [receiptUserOptions, setReceiptUserOptions] = useState([]);
+
   const [showViewReceiptModal, setShowViewReceiptModal] = useState(false);
-  const [viewReceiptDetails, setViewReceiptDetails] = useState(null);
+  const [viewReceiptID, setViewReceiptID] = useState(null);
 
   // ----- Add these new state declarations (near your other state declarations) -----
   const [showUpdateReceiptModal, setShowUpdateReceiptModal] = useState(false);
-  const [updateReceiptData, setUpdateReceiptData] = useState(null);
-  const [updateReceiptImage, setUpdateReceiptImage] = useState(null);
-  const [updateReceiptImagePreview, setUpdateReceiptImagePreview] =
-    useState("");
-  const [updateReceiptFrom, setUpdateReceiptFrom] = useState("");
-  const [updateReceiptTo, setUpdateReceiptTo] = useState("");
-  const [updateReceiptFromComsoc, setUpdateReceiptFromComsoc] = useState(false);
-  const [updateReceiptToComsoc, setUpdateReceiptToComsoc] = useState(false);
-  // Create a ref for the update receipt image input
-  const updateReceiptInputRef = useRef(null);
+  const [updateReceiptID, setUpdateReceiptID] = useState(null);
+
+  const [viewReceiptRefreshKey, setViewReceiptRefreshKey] = useState(
+    Date.now()
+  );
 
   // Scroll error into view if errorMsg changes
   useEffect(() => {
@@ -293,16 +282,9 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
   function resetReceiptForm() {
     // Reset only receipt-related fields
     setReceiptIDs([]);
-    setReceiptImage(null);
-    setReceiptImagePreview("");
-    setReceiptFrom("");
-    setReceiptTo("");
-    setReceiptFromComsoc(false);
-    setReceiptToComsoc(false);
-    setReceiptUserOptions([]);
     setShowAddReceiptModal(false);
     setShowViewReceiptModal(false);
-    setViewReceiptDetails(null);
+    setViewReceiptID(null);
     setReceiptPreviews([]);
   }
 
@@ -499,109 +481,16 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
     setShowLightBox(false);
   };
 
-  // Handler for receipt image input change
-  const handleReceiptImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setReceiptImage(file);
-    setReceiptImagePreview(URL.createObjectURL(file));
-  };
-
-  // Fetch user options for COMSOC members from /fetch-user-options
-  const fetchReceiptUserOptions = async () => {
-    try {
-      const res = await fetch(`${ip}/fetch-user-options`);
-      const result = await res.json();
-      if (result.status && Array.isArray(result.data)) {
-        setReceiptUserOptions(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching user options:", error);
-    }
-  };
-
-  // Handler for submitting the receipt modal
-  const handleReceiptSubmit = async () => {
-    if (!receiptImage || !receiptFrom || !receiptTo) {
-      setReceiptErrorMsg(
-        "Receipt image, receive from and receive to are required."
-      );
-      return;
-    }
-    // Create FormData to upload the receipt image to /upload-receipt-image.
-    const formData = new FormData();
-    formData.append("receiptFile", receiptImage);
-    try {
-      // Upload image; assume the endpoint stores it in the /receipt folder.
-      const res = await fetch(`${ip}/upload-receipt-image`, {
-        method: "POST",
-        body: formData,
-      });
-      const result = await res.json();
-      if (
-        result.status &&
-        Array.isArray(result.fileNames) &&
-        result.fileNames.length > 0
-      ) {
-        const fname = result.fileNames[0]; // Uploaded image file name
-        // Build receipt payload with extra parameters.
-        const receiptPayload = {
-          user_data: userData,
-          type: "Expense",
-          image: fname,
-          direction: "Outgoing",
-          receive_from: receiptFrom,
-          receive_to: receiptTo,
-        };
-        const creRes = await fetch(`${ip}/create-receipt`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(receiptPayload),
-        });
-        const creResult = await creRes.json();
-        if (creResult.status && creResult.id) {
-          // Save the returned receipt id
-          setReceiptIDs((prev) => [...prev, creResult.id]);
-          const previewUrl = `${ip}/receipts/${fname}`;
-          setReceiptPreviews((prev) => [...prev, previewUrl]);
-          // Clear modal fields and close modal
-          setReceiptImage(null);
-          setReceiptImagePreview("");
-          setReceiptFrom("");
-          setReceiptTo("");
-          setReceiptFromComsoc(false);
-          setReceiptToComsoc(false);
-          setShowAddReceiptModal(false);
-          console.log("setReceiptIDs", receiptIDs);
-        } else {
-          setReceiptErrorMsg("Failed to create receipt.");
-        }
-      }
-    } catch (error) {
-      console.error("Error submitting receipt:", error);
-      setReceiptErrorMsg("Failed to submit receipt. Please try again.");
-    }
-  };
+  function handleAddReceipt(newReceipt) {
+    setReceiptIDs((prev) => [...prev, newReceipt.id]);
+    setReceiptPreviews((prev) => [...prev, newReceipt.previewUrl]);
+  }
 
   // Function to open the View Receipt modal by fetching details via /fecth-receipt-details
-  const openViewReceiptModal = async (receiptId) => {
-    try {
-      const res = await fetch(`${ip}/fetch-receipt-details`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: receiptId }),
-      });
-      const result = await res.json();
-      if (result.status && result.receipt) {
-        setViewReceiptDetails(result.receipt);
-        setShowViewReceiptModal(true);
-      } else {
-        setErrorMsg("Failed to fetch receipt details.");
-      }
-    } catch (error) {
-      console.error("Error fetching receipt details:", error);
-      setErrorMsg("Failed to fetch receipt details.");
-    }
+  const openViewReceiptModal = (receiptId) => {
+    // Instead of fetching data here, simply set the receiptId to open the modal.
+    setViewReceiptID({ id: receiptId });
+    setShowViewReceiptModal(true);
   };
 
   // Function to delete a receipt by id.
@@ -619,9 +508,9 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
         setReceiptIDs((prev) => prev.filter((id) => id !== receiptId));
         setReceiptPreviews((prev) => prev.filter((url) => url !== previewUrl));
         // If the deleted receipt is open in the view modal, close it.
-        if (viewReceiptDetails && viewReceiptDetails.id === receiptId) {
+        if (viewReceiptID && viewReceiptID.id === receiptId) {
           setShowViewReceiptModal(false);
-          setViewReceiptDetails(null);
+          setViewReceiptID(null);
         }
       } else {
         handleShowNotification("Deletion failed.", "error");
@@ -632,134 +521,12 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
     }
   }
 
-  // ----- Function to handle image change for update modal -----
-  const handleUpdateReceiptImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUpdateReceiptImage(file);
-    setUpdateReceiptImagePreview(URL.createObjectURL(file));
-  };
-
   // ----- Function to open update modal, recycling add receipt inputs -----
   const openUpdateReceiptModal = (receipt) => {
-    // Pre-fill fields from the receipt details to update
-    setUpdateReceiptData(receipt);
-    setUpdateReceiptImagePreview(`${ip}/receipts/${receipt.image}`);
-
-    if (receipt.receive_to_comsoc === 1) {
-      setUpdateReceiptToComsoc(true);
-      setUpdateReceiptFrom(receipt.receive_from_student_id);
-    } else {
-      setUpdateReceiptToComsoc(true);
-      setUpdateReceiptFrom(receipt.receive_from_name);
-    }
-
-    if (receipt.receive_from_comsoc === 1) {
-      setUpdateReceiptFromComsoc(true);
-      setUpdateReceiptTo(receipt.receive_to_student_id);
-    } else {
-      setUpdateReceiptFromComsoc(true);
-      setUpdateReceiptTo(receipt.receive_to);
-    }
+    // Instead of passing the full receipt data, save the receipt id.
+    setUpdateReceiptID(receipt.id);
     setShowUpdateReceiptModal(true);
   };
-
-  // ----- Submit handler for updating receipt -----
-  async function handleUpdateReceiptSubmit() {
-    let imageFileName = updateReceiptData.image;
-    const oldImageName = updateReceiptData.image;
-    if (updateReceiptImage) {
-      // Create FormData to update image.
-      const formData = new FormData();
-      formData.append("receiptFile", updateReceiptImage);
-      try {
-        const res = await fetch(`${ip}/upload-receipt-image`, {
-          method: "POST",
-          body: formData,
-        });
-        const result = await res.json();
-        if (
-          result.status &&
-          Array.isArray(result.fileNames) &&
-          result.fileNames.length > 0
-        ) {
-          imageFileName = result.fileNames[0];
-        } else {
-          setReceiptErrorMsg("Failed to upload updated receipt image.");
-          return;
-        }
-      } catch (error) {
-        console.error("Error updating receipt image:", error);
-        setReceiptErrorMsg("Failed to update receipt image. Please try again.");
-        return;
-      }
-
-      // Delete the old image if the filename has changed.
-      if (oldImageName && oldImageName !== imageFileName) {
-        try {
-          await fetch(`${ip}/delete-receipt-image`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename: oldImageName }),
-          });
-        } catch (deleteError) {
-          console.error("Error deleting old receipt image:", deleteError);
-          // Optional: notify the user but continue with the update.
-        }
-      }
-    }
-
-    const updatePayload = {
-      id: updateReceiptData.id,
-      type: updateReceiptData.type,
-      image: imageFileName,
-      receive_from: updateReceiptFrom,
-      receive_to: updateReceiptTo,
-    };
-
-    try {
-      const res = await fetch(`${ip}/update-receipt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatePayload),
-      });
-      const result = await res.json();
-      if (result.status) {
-        handleShowNotification("Receipt updated successfully.", "success");
-        // Update local receipt preview if needed.
-        const updatedPreviewUrl = `${ip}/receipts/${imageFileName}`;
-        setReceiptPreviews((prev) =>
-          prev.map((url) =>
-            url === `${ip}/receipts/${updateReceiptData.image}`
-              ? updatedPreviewUrl
-              : url
-          )
-        );
-        // If the view receipt modal is open, refresh its details:
-        if (
-          viewReceiptDetails &&
-          viewReceiptDetails.id === updateReceiptData.id
-        ) {
-          // Re-fetch the updated receipt details.
-          openViewReceiptModal(updateReceiptData.id);
-        }
-        setShowUpdateReceiptModal(false);
-        setUpdateReceiptData(null);
-        setUpdateReceiptImage(null);
-        setUpdateReceiptImagePreview("");
-        setUpdateReceiptFrom("");
-        setUpdateReceiptTo("");
-      } else {
-        handleShowNotification(
-          result.error || "Receipt update failed.",
-          "error"
-        );
-      }
-    } catch (error) {
-      console.error("Error updating receipt:", error);
-      handleShowNotification("Error updating receipt.", "error");
-    }
-  }
 
   if (!isOpen) return null;
   return (
@@ -856,7 +623,7 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
                                       <img
                                         src={icons["src/assets/delete.svg"]}
                                         alt="Remove row"
-                                        className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
+                                        className="w-4 h-4 object-cover rounded cursor-pointer"
                                       />
                                     ) : (
                                       <p>Delete</p>
@@ -994,7 +761,7 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
                                               onClick={() =>
                                                 removeRowFromGroup(gIdx, rIdx)
                                               }
-                                              className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                              className="transition-all duration-150 transform hover:scale-105 cursor-pointer bg-red-500 text-white px-2 py-1 rounded text-xs"
                                             >
                                               {isMobile ? (
                                                 <img
@@ -1081,7 +848,7 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
                                 </td>
                               </tr>
                             ))}
-                            <tr className="text-sm font-semibold border-y bg-white">
+                            <tr className="text-sm font-semibold border-t bg-white">
                               <td className="p-1 px-2">Total Expense</td>
                               <td className="p-1 px-2">
                                 ₱ {calculateOverallTotal()}
@@ -1407,522 +1174,58 @@ export default function CreateExpenseModal({ isOpen, onClose, refreshData }) {
       </Modal>
 
       {showAddReceiptModal && (
-        <Modal
-          title="ADD RECEIPT"
+        <AddReceiptModal
           isOpen={showAddReceiptModal}
           onClose={() => setShowAddReceiptModal(false)}
-          modalCenter={true}
-          w="w-11/12 md:w-4/7 lg:w-3/7 xl:w-3/7 md:h-1/2"
-        >
-          <div className="p-4 h-full overflow-y-auto">
-            <div className="h-3/4 flex flex-col space-y-4">
-              <div className="flex flex-col sm:flex-row space-y-4 sm:space-x-4">
-                <div className="justify-items-center sm:w-1/3">
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receipt Image
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleReceiptImageChange}
-                      ref={receiptInputRef}
-                      style={{ display: "none" }}
-                    />
-                    {receiptImagePreview ? (
-                      <div className="relative w-32 h-32 border rounded-md overflow-clip">
-                        <img
-                          src={receiptImagePreview}
-                          alt="Receipt Preview"
-                          className="w-full h-full object-cover cursor-pointer"
-                          onClick={() => {
-                            setSelectedProof(receiptImagePreview);
-                            setShowLightBox(true);
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            setReceiptImage(null);
-                            setReceiptImagePreview("");
-                          }}
-                          className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded-sm z-10"
-                        >
-                          X
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          setReceiptErrorMsg("");
-                          receiptInputRef.current.click();
-                        }}
-                        className="w-32 h-32 flex items-center justify-center border-2 border-dashed rounded-md"
-                      >
-                        <p className="text-xs">Add Image</p>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="sm:w-2/3 space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receive From
-                    </label>
-                    {receiptFromComsoc ? (
-                      <>
-                        <Input
-                          type="text"
-                          list="receiptFromList"
-                          value={receiptFrom}
-                          onChange={(e) => setReceiptFrom(e.target.value)}
-                          placeholder="Type to search member"
-                          className="rounded-md border border-black p-0.5 w-full"
-                        />
-                        <datalist id="receiptFromList">
-                          {receiptUserOptions.map((user) => (
-                            <option
-                              key={user.student_id}
-                              value={user.student_id}
-                            >
-                              {user.full_name}
-                            </option>
-                          ))}
-                        </datalist>
-                      </>
-                    ) : (
-                      <Input
-                        type="text"
-                        value={receiptFrom}
-                        onChange={(e) => setReceiptFrom(e.target.value)}
-                        placeholder="Enter name"
-                        className="border rounded-md w-full p-0.5"
-                      />
-                    )}
-                    <div className="mt-2 flex items-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={receiptFromComsoc}
-                        onChange={(e) => {
-                          setReceiptFromComsoc(e.target.checked);
-                          setReceiptFrom("");
-                          if (e.target.checked) {
-                            fetchReceiptUserOptions();
-                          } else {
-                            setReceiptFrom("");
-                          }
-                        }}
-                      />
-                      <span className="mt-0.5 text-xs">COMSOC Member</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receive To
-                    </label>
-                    {receiptToComsoc ? (
-                      <>
-                        <Input
-                          type="text"
-                          list="receiptToList"
-                          value={receiptTo}
-                          onChange={(e) => setReceiptTo(e.target.value)}
-                          placeholder="Type to search member"
-                          className="rounded-md border border-black p-0.5 w-full"
-                        />
-                        <datalist id="receiptToList">
-                          {receiptUserOptions.map((user) => (
-                            <option
-                              key={user.student_id}
-                              value={user.student_id}
-                            >
-                              {user.full_name}
-                            </option>
-                          ))}
-                        </datalist>
-                      </>
-                    ) : (
-                      <Input
-                        type="text"
-                        value={receiptTo}
-                        onChange={(e) => setReceiptTo(e.target.value)}
-                        placeholder="Enter name"
-                        className="border rounded-md w-full p-0.5"
-                      />
-                    )}
-                    <div className="mt-2 flex items-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={receiptToComsoc}
-                        onChange={(e) => {
-                          setReceiptToComsoc(e.target.checked);
-                          setReceiptTo("");
-                          if (e.target.checked) {
-                            fetchReceiptUserOptions();
-                          } else {
-                            setReceiptTo("");
-                          }
-                        }}
-                      />
-                      <span className="mt-0.5 text-xs">COMSOC Member</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {receiptErrorMsg && (
-                <p ref={receiptErrorRef} className="text-red-600 text-sm">
-                  {receiptErrorMsg}
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end space-x-4 h-1/4 pt-8 ">
-              <Button
-                type="button"
-                onClick={() => {
-                  setReceiptErrorMsg("");
-                  setShowAddReceiptModal(false);
-                }}
-                className="bg-gray-400 hover:bg-gray-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-10"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setReceiptErrorMsg("");
-                  handleReceiptSubmit();
-                }}
-                className="transform hover:scale-105 bg-green-600 text-white px-4 py-1 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-sm sm:text-base h-10"
-              >
-                Submit Receipt
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          ip={ip}
+          userData={userData}
+          onAddReceipt={handleAddReceipt}
+        />
       )}
-      {showViewReceiptModal && viewReceiptDetails && (
-        <Modal
-          title="VIEW RECEIPT"
+
+      {showViewReceiptModal && viewReceiptID && (
+        <ViewReceiptModal
+          key={`viewReceipt-${viewReceiptID.id}-${viewReceiptRefreshKey}`}
           isOpen={showViewReceiptModal}
           onClose={() => {
             setShowViewReceiptModal(false);
-            setViewReceiptDetails(null);
+            setViewReceiptID(null);
           }}
-          modalCenter={false}
-          w="w-11/12 h-11/12 md:h-6/7 md:w-4/7 lg:w-3/7 xl:w-3/7"
-        >
-          <div className="sm:p-2 md:p-6 h-full w-full">
-            <div className="h-9/10">
-              <div className="overflow-y-auto bg-[#00ff6222] border rounded-lg w-full h-full">
-                <div className="flex flex-col md:flex-row bg-emerald-500 py-2 px-4 border-b">
-                  <label className="text-base block font-semibold">
-                    {viewReceiptDetails.type
-                      ? `${viewReceiptDetails.type} Receipt`
-                      : "Receipt"}
-                  </label>
-                </div>
-                <div className="text-sm p-4 flex flex-col sm:flex-row space-y-4 sm:space-x-4">
-                  <div className="w-full sm:w-fit justify-items-center sm:justify-items-start">
-                    <div className="w-48 h-48 sm:w-56 sm:h-56 border rounded-md overflow-clip">
-                      <img
-                        src={`${ip}/receipts/${viewReceiptDetails.image}`}
-                        alt="Receipt Preview"
-                        className="w-full h-full object-cover cursor-pointer"
-                        onClick={() => {
-                          setSelectedProof(
-                            `${ip}/receipts/${viewReceiptDetails.image}`
-                          );
-                          setShowLightBox(true);
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="sm:flex sm:flex-col space-y-4">
-                    <div>
-                      <label className="block font-semibold">
-                        Receive From
-                      </label>
-                      <div>
-                        {viewReceiptDetails.receive_from_name}
-                        {viewReceiptDetails.receive_from_student_id
-                          ? ` - (${viewReceiptDetails.receive_from_student_id})`
-                          : ""}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block font-semibold">Receive To</label>
-                      <div>
-                        {viewReceiptDetails.receive_to_name}
-                        {viewReceiptDetails.receive_to_student_id
-                          ? ` - (${viewReceiptDetails.receive_to_student_id})`
-                          : ""}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-1 gap-4 sm:gap-0 sm:space-y-4">
-                      <div>
-                        <label className="block font-semibold">
-                          Receipt ID
-                        </label>
-                        <div>{viewReceiptDetails.id}</div>
-                      </div>
-                      <div>
-                        <label className="block font-semibold">Direction</label>
-                        <div>{viewReceiptDetails.direction}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-sm px-4 py-2 grid border-t grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-semibold">
-                      Receipt Created
-                    </label>
-                    <div>{viewReceiptDetails.created_at}</div>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold">
-                      Receipt Updated
-                    </label>
-                    <div>{viewReceiptDetails.updated_at}</div>
-                  </div>
-                  <div>
-                    <label className="block font-semibold">Issued By</label>
-                    <div className="text-base font-semibold">
-                      {viewReceiptDetails.full_name}
-                    </div>
-                    <p className="text-sm">{viewReceiptDetails.designation}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end mt-4 space-x-2 sm:space-x-4 h-1/10">
-                <Button
-                  type="button"
-                  className="bg-blue-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-blue-800 transform hover:scale-105 flex items-center h-8"
-                  onClick={() => {
-                    openUpdateReceiptModal(viewReceiptDetails);
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  className="bg-red-600 hover:bg-red-800 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-8"
-                  onClick={() =>
-                    deleteReceipt(
-                      viewReceiptDetails.id,
-                      `${ip}/receipts/${viewReceiptDetails.image}`
-                    )
-                  }
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Modal>
+          ip={ip}
+          receiptId={viewReceiptID.id}
+          onEdit={openUpdateReceiptModal}
+          onDelete={(id, previewUrl) => deleteReceipt(id, previewUrl)}
+          isMobile={isMobile}
+        />
       )}
-      {showUpdateReceiptModal && updateReceiptData && (
-        <Modal
-          title="Update Receipt"
+      {showUpdateReceiptModal && updateReceiptID && (
+        <UpdateReceiptModal
           isOpen={showUpdateReceiptModal}
           onClose={() => {
             setShowUpdateReceiptModal(false);
-            setUpdateReceiptData(null);
+            setUpdateReceiptID(null);
           }}
-          modalCenter={true}
-          w="w-11/12 md:w-4/7 lg:w-3/7 xl:w-3/7 md:h-1/2"
-        >
-          <div className="p-4 h-full overflow-y-auto">
-            <div className="h-3/4 flex flex-col space-y-4">
-              <div className="flex flex-col sm:flex-row space-y-4 sm:space-x-4">
-                <div className="justify-items-center sm:w-1/3">
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receipt Image
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleUpdateReceiptImageChange}
-                      ref={updateReceiptInputRef}
-                      style={{ display: "none" }}
-                    />
-                    {updateReceiptImagePreview ? (
-                      <div className="relative w-32 h-32 border rounded-md overflow-clip">
-                        <img
-                          src={updateReceiptImagePreview}
-                          alt="Receipt Preview"
-                          className="w-full h-full object-cover cursor-pointer"
-                          onClick={() => {
-                            setSelectedProof(updateReceiptImagePreview);
-                            setShowLightBox(true);
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            setUpdateReceiptImage(null);
-                            setUpdateReceiptImagePreview("");
-                          }}
-                          className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded-sm z-10"
-                        >
-                          X
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          setReceiptErrorMsg("");
-                          updateReceiptInputRef.current.click();
-                        }}
-                        className="w-32 h-32 flex items-center justify-center border-2 border-dashed rounded-md"
-                      >
-                        <p className="text-xs">Add Image</p>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="sm:w-2/3 space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receive From
-                    </label>
-                    {updateReceiptFromComsoc ? (
-                      <>
-                        <Input
-                          type="text"
-                          list="updateReceiptFromList"
-                          value={updateReceiptFrom}
-                          onChange={(e) => setUpdateReceiptFrom(e.target.value)}
-                          placeholder="Type to search member"
-                          className="rounded-md border border-black p-0.5 w-full"
-                        />
-                        <datalist id="updateReceiptFromList">
-                          {receiptUserOptions.map((user) => (
-                            <option
-                              key={user.student_id}
-                              value={user.student_id}
-                            >
-                              {user.full_name}
-                            </option>
-                          ))}
-                        </datalist>
-                      </>
-                    ) : (
-                      <Input
-                        type="text"
-                        value={updateReceiptFrom}
-                        onChange={(e) => setUpdateReceiptFrom(e.target.value)}
-                        placeholder="Enter name"
-                        className="border rounded-md w-full p-0.5"
-                      />
-                    )}
-                    <div className="mt-2 flex items-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={updateReceiptFromComsoc}
-                        onChange={(e) => {
-                          setUpdateReceiptFromComsoc(e.target.checked);
-                          setUpdateReceiptFrom("");
-                          if (e.target.checked) {
-                            fetchReceiptUserOptions();
-                          } else {
-                            setUpdateReceiptFrom("");
-                          }
-                        }}
-                      />
-                      <span className="mt-0.5 text-xs">COMSOC Member</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold">
-                      Receive To
-                    </label>
-                    {updateReceiptToComsoc ? (
-                      <>
-                        <Input
-                          type="text"
-                          list="updateReceiptToList"
-                          value={updateReceiptTo}
-                          onChange={(e) => setUpdateReceiptTo(e.target.value)}
-                          placeholder="Type to search member"
-                          className="rounded-md border border-black p-0.5 w-full"
-                        />
-                        <datalist id="updateReceiptToList">
-                          {receiptUserOptions.map((user) => (
-                            <option
-                              key={user.student_id}
-                              value={user.student_id}
-                            >
-                              {user.full_name}
-                            </option>
-                          ))}
-                        </datalist>
-                      </>
-                    ) : (
-                      <Input
-                        type="text"
-                        value={updateReceiptTo}
-                        onChange={(e) => setUpdateReceiptTo(e.target.value)}
-                        placeholder="Enter name"
-                        className="border rounded-md w-full p-0.5"
-                      />
-                    )}
-                    <div className="mt-2 flex items-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={updateReceiptToComsoc}
-                        onChange={(e) => {
-                          setUpdateReceiptToComsoc(e.target.checked);
-                          setUpdateReceiptTo("");
-                          if (e.target.checked) {
-                            fetchReceiptUserOptions();
-                          } else {
-                            setUpdateReceiptTo("");
-                          }
-                        }}
-                      />
-                      <span className="mt-0.5 text-xs">COMSOC Member</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {receiptErrorMsg && (
-                <p ref={receiptErrorRef} className="text-red-600 text-sm">
-                  {receiptErrorMsg}
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end space-x-4 h-1/4 pt-8 ">
-              <Button
-                type="button"
-                onClick={() => {
-                  setReceiptErrorMsg("");
-                  setShowUpdateReceiptModal(false);
-                  setUpdateReceiptData(null);
-                }}
-                className="bg-gray-400 hover:bg-gray-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 transform hover:scale-105 flex items-center h-10"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setReceiptErrorMsg("");
-                  handleUpdateReceiptSubmit();
-                }}
-                className="transform hover:scale-105 bg-green-600 text-white px-4 py-1 rounded cursor-pointer transition-all duration-150 hover:bg-green-800 text-sm sm:text-base h-10"
-              >
-                Update Receipt
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          ip={ip}
+          receiptId={updateReceiptID}
+          onUpdateReceipt={(id, newImage) => {
+            const updatedPreviewUrl = `${ip}/receipts/${newImage}`;
+            const indexToUpdate = receiptIDs.findIndex(
+              (receiptId) => receiptId === id
+            );
+            if (indexToUpdate !== -1) {
+              setReceiptPreviews((prev) =>
+                prev.map((url, idx) =>
+                  idx === indexToUpdate ? updatedPreviewUrl : url
+                )
+              );
+            }
+            // Refresh the view modal by updating its key with a new unique value:
+            if (viewReceiptID && viewReceiptID.id === id) {
+              setViewReceiptRefreshKey(`${Date.now()}-${Math.random()}`);
+            }
+          }}
+          isMobile={isMobile}
+        />
       )}
       {selectedProof && showLightBox && (
         <LightboxModal

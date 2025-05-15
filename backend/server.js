@@ -314,7 +314,7 @@ app.post("/fetch-budgets", async (req, res) => {
   let sql;
 
   if (mode === "Populate") {
-    sql = "SELECT * FROM budget";
+    sql = "SELECT * FROM budget WHERE status = 'Published'";
   }
 
   oms_db.query(sql, (err, results) => {
@@ -848,7 +848,7 @@ app.post("/fetch-deposit-details", (req, res) => {
     return res.json({ status: true, data: results[0] });
   });
 });
-*/
+
 
 app.post("/fetch-expenses", async (req, res) => {
   const { mode, searchTerm, year, startDate, endDate } = req.body;
@@ -931,6 +931,7 @@ app.post("/fetch-expense-details", (req, res) => {
     return res.json({ status: true, data: results[0] });
   });
 });
+*/
 
 app.post("/fetch-sections", (req, res) => {
   const { mode, searchTerm, year, startDate, endDate } = req.body;
@@ -1625,7 +1626,7 @@ app.post("/fetch-financial-groupings-deposit", (req, res) => {
     // Search across common fields
     sql += " AND (name LIKE ?)";
     const pattern = `%${searchTerm}%`;
-    params.push(pattern, pattern, pattern);
+    params.push(pattern);
   } else if (mode === "Filter") {
     // Filter by creation year and optionally by date range (requires created_at field)
     sql += " AND YEAR(created_at) = ?";
@@ -1692,7 +1693,7 @@ app.post("/fetch-financial-groupings-expense", (req, res) => {
     // Search across common fields
     sql += " AND (name LIKE ?)";
     const pattern = `%${searchTerm}%`;
-    params.push(pattern, pattern, pattern);
+    params.push(pattern);
   } else if (mode === "Filter") {
     // Filter by creation year and optionally by date range (requires created_at field)
     sql += " AND YEAR(created_at) = ?";
@@ -1914,7 +1915,8 @@ app.post("/update-record-group", (req, res) => {
 // Route to fetch deposits
 app.post("/fetch-deposits", (req, res) => {
   // For simplicity, fetching all deposits. You can add filtering as needed.
-  const sql = `
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+  let sql = `
     SELECT 
       d.id, 
       d.name, 
@@ -1925,10 +1927,50 @@ app.post("/fetch-deposits", (req, res) => {
     FROM deposit d
     LEFT JOIN record_group rg on d.record_group_id = rg.id
     WHERE d.status = 'Issued'
-    ORDER BY issued_at DESC
-    
   `;
-  oms_db.query(sql, (err, results) => {
+
+  let params = [];
+
+  if (mode === "Populate") {
+    // No additional filtering needed
+    // Optionally: sql += " ORDER BY created_at DESC";
+  } else if (mode === "Search") {
+    // Search across common fields
+    sql += " AND (CAST(d.amount AS CHAR) LIKE ? OR rg.name LIKE ?)";
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    // Filter by creation year and optionally by date range (requires created_at field)
+    sql += " AND YEAR(d.issued_at) = ?";
+    params.push(year);
+    if (startDate) {
+      sql += " AND d.issued_at >= ?";
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += " AND d.issued_at <= ?";
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    // Both search and filter criteria
+    sql += " AND (CAST(d.amount AS CHAR) LIKE ? OR rg.name LIKE ?)";
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    sql += " AND YEAR(d.issued_at) = ?";
+    params.push(year);
+    if (startDate) {
+      sql += " AND d.issued_at >= ?";
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += " AND d.issued_at <= ?";
+      params.push(endDate);
+    }
+  }
+
+  sql += " ORDER BY d.issued_at DESC";
+
+  oms_db.query(sql, params, (err, results) => {
     if (err) {
       console.error("Error fetching deposits:", err);
       return res
@@ -1951,10 +1993,62 @@ app.post("/fetch-deposits", (req, res) => {
 
 // Route to fetch deposits
 app.post("/fetch-manage-deposits", (req, res) => {
-  // For simplicity, fetching all deposits. You can add filtering as needed.
-  const sql =
-    "SELECT id, name, issued_at, amount, status FROM deposit ORDER BY created_at DESC";
-  oms_db.query(sql, (err, results) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query and JOIN
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      issued_at, 
+      amount, 
+      status
+    FROM deposit
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Add conditions based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // Append WHERE clause if there are any conditions
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += " ORDER BY created_at DESC";
+
+  oms_db.query(sql, params, (err, results) => {
     if (err) {
       console.error("Error fetching deposits:", err);
       return res
@@ -1962,7 +2056,6 @@ app.post("/fetch-manage-deposits", (req, res) => {
         .json({ status: false, error: "Internal Server Error" });
     }
 
-    // Format issued_at for each deposit if not null.
     const data = results.map((deposit) => {
       if (deposit.issued_at !== null) {
         deposit.issued_at = formatDateTableNoTime(deposit.issued_at);
@@ -1971,7 +2064,7 @@ app.post("/fetch-manage-deposits", (req, res) => {
       return deposit;
     });
 
-    return res.json({ status: true, data: data });
+    return res.json({ status: true, data });
   });
 });
 
@@ -2376,14 +2469,18 @@ app.post("/fetch-current-org-balance", (req, res) => {
       const totalDeposit = parseFloat(depResults[0].totalDeposit) || 0;
       const totalExpense = parseFloat(expResults[0].totalExpense) || 0;
       const currentOrgBalance = totalDeposit - totalExpense;
+      const currentOrgBalanceRounded = Number(currentOrgBalance.toFixed(2));
+      const displayBalance =
+        currentOrgBalanceRounded < 0
+          ? `₱ 0.00 (₱ ${currentOrgBalanceRounded})`
+          : "₱ " + currentOrgBalanceRounded;
       return res.json({
         status: true,
-        data: { current_org_bal: `₱ ${currentOrgBalance}` },
+        data: { current_org_bal: displayBalance },
       });
     });
   });
 });
-
 // Route to fetch the latest issued deposit
 app.post("/fetch-latest-org-deposit", (req, res) => {
   // Assumes that the latest deposit is determined by issued_at descending.
@@ -2455,11 +2552,142 @@ app.post("/fetch-your-servicing-points", (req, res) => {
 });
 
 // Route to fetch expenses
+app.post("/fetch-expenses", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+  let sql = `
+    SELECT 
+      e.id, 
+      e.name, 
+      e.amount, 
+      e.issued_at,
+      e.record_group_id,
+      rg.name as category_name
+    FROM expense e
+    LEFT JOIN record_group rg on e.record_group_id = rg.id
+    WHERE e.status = 'Issued'
+    
+  `;
+
+  let params = [];
+
+  if (mode === "Populate") {
+    // No additional filtering needed
+    // Optionally: sql += " ORDER BY created_at DESC";
+  } else if (mode === "Search") {
+    // Search across common fields
+    sql += " AND (CAST(e.amount AS CHAR) LIKE ? OR rg.name LIKE ?)";
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    // Filter by creation year and optionally by date range (requires created_at field)
+    sql += " AND YEAR(e.issued_at) = ?";
+    params.push(year);
+    if (startDate) {
+      sql += " AND e.issued_at >= ?";
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += " AND e.issued_at <= ?";
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    // Both search and filter criteria
+    sql += " AND (CAST(d.amount AS CHAR) LIKE ? OR rg.name LIKE ?)";
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    sql += " AND YEAR(e.issued_at) = ?";
+    params.push(year);
+    if (startDate) {
+      sql += " AND e.issued_at >= ?";
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += " AND e.issued_at <= ?";
+      params.push(endDate);
+    }
+  }
+
+  sql += " ORDER BY e.issued_at DESC";
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching expenses:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format issued_at for each expense if not null.
+    const data = results.map((expense) => {
+      if (expense.issued_at !== null) {
+        expense.issued_at = formatDateTableNoTime(expense.issued_at);
+      }
+      expense.amount = "₱ " + expense.amount;
+      return expense;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+// Route to fetch expenses for management
 app.post("/fetch-manage-expenses", (req, res) => {
-  // For simplicity, fetching all deposits. You can add filtering as needed.
-  const sql =
-    "SELECT id, name, issued_at, amount, status FROM expense ORDER BY created_at DESC";
-  oms_db.query(sql, (err, results) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query and JOIN
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      issued_at, 
+      amount, 
+      status
+    FROM expense
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Add conditions based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // Append WHERE clause if there are any conditions
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += " ORDER BY created_at DESC";
+
+  oms_db.query(sql, params, (err, results) => {
     if (err) {
       console.error("Error fetching expensecs:", err);
       return res
@@ -2750,7 +2978,8 @@ app.post("/fetch-receipt-details", (req, res) => {
       ut.student_id as receive_to_student_id,
       r.direction,
       ua.full_name AS full_name,
-      ua.designation AS designation
+      ua.designation AS designation,
+      r.relating_id
     FROM receipt r
     LEFT JOIN user_account uf ON r.receive_from = uf.student_id
     LEFT JOIN user_account ut ON r.receive_to = ut.student_id
@@ -2835,6 +3064,1596 @@ app.post("/update-receipt", (req, res) => {
       });
     }
   );
+});
+
+app.post("/fetch-expense-details", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Expense ID is required." });
+  }
+
+  // Query the expense along with the budget name (using budget_id)
+  const sql = `
+    SELECT 
+      e.id,
+      e.user_id,
+      e.created_at,
+      e.updated_at,
+      e.issued_at,
+      e.name,
+      e.breakdown,
+      e.amount,
+      e.proof,
+      e.status,
+      e.budget_id,
+      e.receipt_ids,
+      e.record_group_id,
+      ua.full_name treasurer_full_name,
+      rg.name AS category_name,
+      b.name AS budget_name
+    FROM expense e
+    LEFT JOIN budget b ON e.budget_id = b.id
+    LEFT JOIN user_account ua ON e.user_id = ua.id 
+    LEFT JOIN record_group rg ON e.record_group_id = rg.id
+    WHERE e.id = ?
+  `;
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching expense details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Expense not found." });
+    }
+
+    const expense = results[0];
+
+    // Parse receipt_ids (expected to be a JSON array string)
+    let receiptIDs = [];
+    try {
+      receiptIDs = JSON.parse(expense.receipt_ids);
+      if (!Array.isArray(receiptIDs)) {
+        receiptIDs = [];
+      }
+    } catch (parseErr) {
+      receiptIDs = [];
+    }
+
+    expense.created_at = formatDate(expense.created_at);
+    expense.updated_at = formatDate(expense.updated_at);
+    expense.issued_at = formatDate(expense.issued_at);
+
+    // If there are receipt IDs, query the receipts table to get the corresponding image filenames
+    if (receiptIDs.length > 0) {
+      const placeholders = receiptIDs.map(() => "?").join(",");
+      const receiptsSql = `SELECT id, image FROM receipt WHERE id IN (${placeholders})`;
+      oms_db.query(receiptsSql, receiptIDs, (recErr, recResults) => {
+        if (recErr) {
+          console.error("Error fetching receipt details:", recErr);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        // Build an array of receipt previews (file names)
+        const receiptPreviews = recResults.map((r) => r.image);
+        expense.receiptPreviews = receiptPreviews;
+        return res.json({ status: true, data: expense });
+      });
+    } else {
+      expense.receiptPreviews = [];
+      return res.json({ status: true, data: expense });
+    }
+  });
+});
+
+app.post("/update-expense", (req, res) => {
+  const {
+    id,
+    name,
+    breakdown,
+    amount,
+    record_group_id,
+    proof,
+    receipt_ids,
+    status,
+    mode,
+    budget_id,
+  } = req.body;
+
+  // Validate required fields.
+  if (!id || !name || !status) {
+    return res.status(400).json({
+      status: false,
+      error: "Expense ID, name, and status are required.",
+    });
+  }
+
+  // Determine issued_at value.
+  const issuedAtAssignment = status === "Issued" ? "NOW()" : "NULL";
+  const budgetIdAssignment = budget_id === "null" ? "NULL" : `${budget_id}`;
+
+  let sql = "";
+  let params = [name, breakdown, amount, record_group_id, proof, receipt_ids];
+
+  if (mode === "editDraft") {
+    sql = `
+      UPDATE expense
+      SET name = ?,
+          breakdown = ?,
+          amount = ?,
+          record_group_id = ?,
+          proof = ?,
+          receipt_ids = ?,
+          status = ?,
+          issued_at = ${issuedAtAssignment},
+          budget_id = ${budgetIdAssignment}
+      WHERE id = ?
+    `;
+    params.push(status, id);
+  } else {
+    sql = `
+      UPDATE expense
+      SET name = ?,
+          breakdown = ?,
+          amount = ?,
+          record_group_id = ?,
+          proof = ?,
+          receipt_ids = ?,
+          budget_id = ${budgetIdAssignment}
+      WHERE id = ?
+    `;
+    params.push(id);
+  }
+
+  oms_db.query(sql, params, (err, result) => {
+    if (err) {
+      console.error("Error updating expense:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Expense not found" });
+    }
+
+    // Update the record group count for an expense.
+    updateRecordGroupCount(record_group_id, "Expense");
+
+    return res.json({
+      status: true,
+      message: "Expense updated successfully",
+    });
+  });
+});
+
+app.post("/delete-expense", async (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Expense ID is required" });
+  }
+
+  try {
+    // First, select the expense record to get proof, record_group_id, and receipt_ids.
+    const expenseRecord = await new Promise((resolve, reject) => {
+      oms_db.query(
+        "SELECT proof, record_group_id, receipt_ids FROM expense WHERE id = ?",
+        [id],
+        (err, results) => {
+          if (err) return reject(err);
+          if (results.length === 0)
+            return reject(new Error("Expense not found"));
+          resolve(results[0]);
+        }
+      );
+    });
+
+    const { proof, record_group_id, receipt_ids } = expenseRecord;
+
+    // Delete proof files (if any)
+    if (proof) {
+      let proofFiles = [];
+      try {
+        proofFiles = JSON.parse(proof);
+        if (!Array.isArray(proofFiles)) proofFiles = [];
+      } catch (parseErr) {
+        console.error("Error parsing proof JSON:", parseErr);
+      }
+      const deleteProofPromises = proofFiles.map((fileName) => {
+        const filePath = path.join(__dirname, "proofs", fileName);
+        return new Promise((resolve) => {
+          fs.unlink(filePath, (err) => {
+            if (err)
+              console.error(`Error deleting proof file ${fileName}:`, err);
+            resolve();
+          });
+        });
+      });
+      await Promise.all(deleteProofPromises);
+    }
+
+    // Delete associated receipts and their image files.
+    if (receipt_ids) {
+      let receiptIDArr = [];
+      try {
+        receiptIDArr = JSON.parse(receipt_ids);
+        if (!Array.isArray(receiptIDArr)) receiptIDArr = [];
+      } catch (err) {
+        receiptIDArr = [];
+      }
+      if (receiptIDArr.length > 0) {
+        const deleteReceiptPromises = receiptIDArr.map((receiptId) => {
+          return new Promise((resolve) => {
+            // First, retrieve the receipt record to get its image filename.
+            oms_db.query(
+              "SELECT image FROM receipt WHERE id = ?",
+              [receiptId],
+              (selectErr, recResults) => {
+                if (selectErr) {
+                  console.error("Error selecting receipt:", selectErr);
+                  return resolve();
+                }
+                if (recResults.length === 0) return resolve();
+                const { image } = recResults[0];
+                const imagePath = path.join(__dirname, "receipts", image);
+                // Delete the image file.
+                fs.unlink(imagePath, (unlinkErr) => {
+                  if (unlinkErr && unlinkErr.code !== "ENOENT") {
+                    console.error(
+                      `Error deleting receipt image ${image}:`,
+                      unlinkErr
+                    );
+                  }
+                  // Now delete the receipt record.
+                  oms_db.query(
+                    "DELETE FROM receipt WHERE id = ?",
+                    [receiptId],
+                    (delErr) => {
+                      if (delErr)
+                        console.error("Error deleting receipt record:", delErr);
+                      resolve();
+                    }
+                  );
+                });
+              }
+            );
+          });
+        });
+        await Promise.all(deleteReceiptPromises);
+      }
+    }
+
+    // Now delete the expense record.
+    const deleteResult = await new Promise((resolve, reject) => {
+      oms_db.query("DELETE FROM expense WHERE id = ?", [id], (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      });
+    });
+
+    if (deleteResult.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Expense not found" });
+    }
+
+    // Update the record group count after deletion.
+    updateRecordGroupCount(record_group_id, "Expense");
+
+    return res.json({
+      status: true,
+      message: "Expense and associated receipts deleted successfully",
+    });
+  } catch (err) {
+    console.error("Error deleting expense:", err);
+    return res
+      .status(500)
+      .json({ status: false, error: "Internal Server Error" });
+  }
+});
+
+app.post("/fetch-receipts", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  let sql = `
+    SELECT 
+      r.id,
+      r.type,
+      r.created_at,
+      r.user_id,
+      ua.full_name as issuer_name
+    FROM receipt r
+    LEFT JOIN user_account ua ON r.user_id = ua.id
+  `;
+
+  const conditions = [];
+  const params = [];
+
+  if (mode === "Search") {
+    conditions.push("(CAST(r.id AS CHAR) LIKE ? OR ua.full_name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    if (year) {
+      conditions.push("YEAR(r.created_at) = ?");
+      params.push(year);
+    }
+    if (startDate) {
+      conditions.push("r.created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("r.created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(r.id AS CHAR) LIKE ? OR ua.full_name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+
+    if (year) {
+      conditions.push("YEAR(r.created_at) = ?");
+      params.push(year);
+    }
+    if (startDate) {
+      conditions.push("r.created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("r.created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // Add WHERE clause if needed
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += " ORDER BY r.id DESC";
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching receipts:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    const data = results.map((receipt) => {
+      receipt.created_at = formatDateTable(receipt.created_at);
+      return receipt;
+    });
+
+    return res.json({ status: true, data });
+  });
+});
+
+app.post("/create-budget", (req, res) => {
+  const { user_data, name, description } = req.body;
+  if (!name || !description) {
+    return res
+      .status(400)
+      .json({ status: false, error: "All fields are required" });
+  }
+
+  const userObj = JSON.parse(user_data);
+  const sql =
+    "INSERT INTO budget (name, user_id, description) VALUES (?, ?, ?)";
+
+  oms_db.query(sql, [name, userObj.id, description], (err, result) => {
+    if (err) {
+      console.error("Error creating budget:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ status: true, message: "Budget successfully created" });
+  });
+});
+
+app.post("/fetch-draft-budgets", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      amount, 
+      status
+    FROM budget
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status IN ('Draft', 'Back to Draft')");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Back to Draft' THEN 0 
+        WHEN 'Draft' THEN 1 
+        ELSE 2 
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budget) => {
+      if (budget.created_at !== null) {
+        budget.created_at = formatDateTableNoTime(budget.created_at);
+      }
+      budget.amount = "₱ " + budget.amount;
+      return budget;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-draft-budget-details", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Budget ID is required" });
+  }
+
+  const sql =
+    "SELECT *, approved_at as approved_at_orig FROM budget WHERE id = ?";
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching budget details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ status: false, error: "Budget not found" });
+    }
+
+    const data = results.map((draftBudget) => {
+      draftBudget.updated_at = formatDate(draftBudget.updated_at);
+      draftBudget.created_at = formatDate(draftBudget.created_at);
+      draftBudget.amount = "₱ " + draftBudget.amount;
+
+      if (draftBudget.approved_at !== null) {
+        draftBudget.approved_at = formatDate(draftBudget.approved_at);
+      }
+
+      if (draftBudget.published_at !== null) {
+        draftBudget.published_at = formatDate(draftBudget.published_at);
+      }
+
+      return draftBudget;
+    });
+
+    return res.json({ status: true, data: data[0] });
+  });
+});
+
+app.post("/update-draft-budget", (req, res) => {
+  const {
+    user_data,
+    id,
+    name,
+    description,
+    breakdown,
+    amount,
+    payments,
+    status,
+    include_payment,
+    show_other_officers,
+    request_message,
+  } = req.body;
+
+  if (
+    !id ||
+    !name ||
+    !description ||
+    !amount ||
+    !breakdown ||
+    !payments ||
+    !status
+  ) {
+    return res
+      .status(400)
+      .json({ status: false, error: "All fields are required" });
+  }
+
+  const userObj = JSON.parse(user_data);
+
+  if (status === "Sent for Approval") {
+    // First create an approval record.
+    const approvalName = "Approval for " + name;
+    const approvalSql = `
+      INSERT INTO approval (name, type, relating_id, request_message, user_id)
+      VALUES (?, 'Budget', ?, ?, ?)
+    `;
+    oms_db.query(
+      approvalSql,
+      [approvalName, id, request_message, userObj.id],
+      (approvalErr, approvalResult) => {
+        if (approvalErr) {
+          console.error("Error creating approval record:", approvalErr);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        const approval_id = approvalResult.insertId;
+        // Now update the budget including the new approval_id.
+        const sql = `
+        UPDATE budget 
+        SET name = ?, 
+            description = ?, 
+            breakdown = ?, 
+            payments = ?, 
+            amount = ?,
+            status = ?, 
+            include_payment = ${include_payment ? "1" : "0"},
+            show_other_officers = 1,
+            approval_id = ?
+        WHERE id = ?
+      `;
+        oms_db.query(
+          sql,
+          [
+            name,
+            description,
+            JSON.stringify(breakdown),
+            JSON.stringify(payments),
+            amount,
+            status,
+            approval_id,
+            id,
+          ],
+          (err, result) => {
+            if (err) {
+              console.error("Error updating budget with approval:", err);
+              return res
+                .status(500)
+                .json({ status: false, error: "Internal Server Error" });
+            }
+            if (result.affectedRows === 0) {
+              return res
+                .status(404)
+                .json({ status: false, error: "Budget not found" });
+            }
+            // Fetch the updated budget
+            const fetchSql = "SELECT * FROM budget WHERE id = ?";
+            oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+              if (fetchErr) {
+                console.error("Error fetching updated budget:", fetchErr);
+                return res
+                  .status(500)
+                  .json({ status: false, error: "Internal Server Error" });
+              }
+              const data = fetchResults.map((draftBudget) => {
+                draftBudget.updated_at = formatDate(draftBudget.updated_at);
+                draftBudget.created_at = formatDate(draftBudget.created_at);
+                draftBudget.amount = "₱ " + draftBudget.amount;
+                return draftBudget;
+              });
+              return res.json({ status: true, data: data[0] });
+            });
+          }
+        );
+      }
+    );
+  } else {
+    // Normal update without creating an approval record.
+    const sql = `
+      UPDATE budget 
+      SET name = ?, 
+          description = ?, 
+          breakdown = ?, 
+          payments = ?, 
+          amount = ?,
+          status = ?, 
+          include_payment = ${include_payment ? "1" : "0"},
+          show_other_officers = ${show_other_officers ? "1" : "0"}
+      WHERE id = ?
+    `;
+    oms_db.query(
+      sql,
+      [
+        name,
+        description,
+        JSON.stringify(breakdown),
+        JSON.stringify(payments),
+        amount,
+        status,
+        id,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Error updating budget:", err);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res
+            .status(404)
+            .json({ status: false, error: "Budget not found" });
+        }
+        const fetchSql = "SELECT * FROM budget WHERE id = ?";
+        oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+          if (fetchErr) {
+            console.error("Error fetching updated budget:", fetchErr);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          const data = fetchResults.map((draftBudget) => {
+            draftBudget.updated_at = formatDate(draftBudget.updated_at);
+            draftBudget.created_at = formatDate(draftBudget.created_at);
+            draftBudget.amount = "₱ " + draftBudget.amount;
+            return draftBudget;
+          });
+          return res.json({ status: true, data: data[0] });
+        });
+      }
+    );
+  }
+});
+
+app.post("/fetch-pending-budget-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      amount, 
+      status
+    FROM budget
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status IN ('Sent for Approval', 'Ready to Publish')");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Ready to Publish' THEN 0 
+        WHEN 'Sent for Approval' THEN 1 
+        ELSE 2 
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching pending budget approvals:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budget) => {
+      budget.created_at = formatDateTableNoTime(budget.created_at);
+      budget.amount = "₱ " + budget.amount;
+      return budget;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-published-budgets", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = "SELECT id, name, published_at, amount FROM budget";
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status = 'Published'");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(published_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("published_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("published_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(published_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("published_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("published_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY published_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budget) => {
+      budget.published_at = formatDateTableNoTime(budget.published_at);
+      budget.amount = "₱ " + budget.amount;
+      return budget;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/cancel-budget-approval", (req, res) => {
+  const { id, past_approval_id, approval_id, user_data } = req.body;
+  if (!id || !approval_id || !user_data || !past_approval_id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  const decision_message = `Cancelled by ${userObj.full_name} - (${userObj.student_id}) ${userObj.designation}`;
+
+  // First update the approval record
+  const updateApprovalSql = `
+    UPDATE approval 
+    SET decision_message = ?, decision = 'Cancelled' 
+    WHERE id = ?
+  `;
+  oms_db.query(
+    updateApprovalSql,
+    [decision_message, approval_id],
+    (err, approvalResult) => {
+      if (err) {
+        console.error("Error updating approval record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      // Then update the budget record
+      const updateBudgetSql = `
+      UPDATE budget 
+      SET status = 'Back to Draft', 
+          show_other_officers = 0, 
+          past_approval_ids = ?, 
+          approval_id = NULL 
+      WHERE id = ?
+    `;
+      // Ensure past_approval_id is stored as JSON (if needed)
+      const pastApprovalIDs = JSON.stringify(past_approval_id);
+      oms_db.query(
+        updateBudgetSql,
+        [pastApprovalIDs, id],
+        (err, budgetResult) => {
+          if (err) {
+            console.error("Error updating budget record:", err);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          return res.json({
+            status: true,
+            message: "Budget approval cancelled successfully",
+          });
+        }
+      );
+    }
+  );
+});
+
+app.post("/fetch-approval-history", (req, res) => {
+  const { type, relating_id } = req.body;
+  if (!type || !relating_id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  const sql = `
+    SELECT 
+      id,
+      decision
+    FROM approval 
+    WHERE type = ? AND relating_id = ?
+    ORDER BY created_at DESC
+  `;
+
+  oms_db.query(sql, [type, relating_id], (err, results) => {
+    if (err) {
+      console.error("Error fetching approval history:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ status: true, data: results });
+  });
+});
+
+app.post("/fetch-approval-details", (req, res) => {
+  const { approval_id } = req.body;
+  if (!approval_id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Approval ID is required" });
+  }
+  const sql = `
+    SELECT 
+      a.id,
+      a.user_id,
+      a.created_at,
+      a.updated_at,
+      a.name,
+      a.type,
+      a.relating_id,
+      a.request_message,
+      a.decision_message,
+      a.decision,
+      ua.full_name,
+      ua.designation
+    FROM approval a
+    LEFT JOIN user_account ua ON a.user_id = ua.id
+    WHERE a.id = ?
+  `;
+  oms_db.query(sql, [approval_id], (err, results) => {
+    if (err) {
+      console.error("Error fetching approval details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Approval not found" });
+    }
+
+    const data = results.map((approval) => {
+      approval.created_at = formatDate(approval.created_at);
+      approval.updated_at = formatDate(approval.updated_at);
+      return approval;
+    });
+
+    return res.json({ status: true, data: data[0] });
+  });
+});
+
+app.post("/fetch-budget-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      name, 
+      relating_id,
+      decision
+    FROM approval
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("type IN ('Budget')");
+  conditions.push("decision IS NULL");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY created_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budgetApprovals) => {
+      budgetApprovals.created_at = formatDateTableNoTime(
+        budgetApprovals.created_at
+      );
+      budgetApprovals.relating_id =
+        "Budget ID - " + budgetApprovals.relating_id;
+      return budgetApprovals;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-payment-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      name, 
+      relating_id,
+      decision
+    FROM approval
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("type IN ('Payment')");
+  conditions.push("decision IS NULL");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY created_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each payment record if not null.
+    const data = results.map((paymentApprovals) => {
+      paymentApprovals.created_at = formatDateTableNoTime(
+        paymentApprovals.created_at
+      );
+      paymentApprovals.relating_id =
+        "Payment ID - " + paymentApprovals.relating_id;
+      return paymentApprovals;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-announcement-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      name, 
+      relating_id,
+      decision
+    FROM approval
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("type IN ('Announment')");
+  conditions.push("decision IS NULL");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += `
+    ORDER BY created_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each announment record if not null.
+    const data = results.map((announmentApprovals) => {
+      announmentApprovals.created_at = formatDateTableNoTime(
+        paymentApprovals.created_at
+      );
+      announmentApprovals.relating_id =
+        "Announment ID - " + announmentApprovals.relating_id;
+      return announmentApprovals;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-decided-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      updated_at, 
+      name, 
+      relating_id,
+      decision
+    FROM approval
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("decision IS NOT NULL");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += `
+    ORDER BY updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each payment record if not null.
+    const data = results.map((paymentApprovals) => {
+      paymentApprovals.updated_at = formatDateTableNoTime(
+        paymentApprovals.updated_at
+      );
+      paymentApprovals.relating_id =
+        "Budget ID - " + paymentApprovals.relating_id;
+      return paymentApprovals;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/budget-approval-decision", (req, res) => {
+  const { approval_id, decision_message, decision, id } = req.body;
+  if (!approval_id || !decision_message || !decision || !id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  // First, update the approval record with the decision and decision_message
+  const updateApprovalSql = `
+    UPDATE approval 
+    SET decision_message = ?, decision = ?
+    WHERE id = ?
+  `;
+  oms_db.query(
+    updateApprovalSql,
+    [decision_message, decision, approval_id],
+    (err, result) => {
+      if (err) {
+        console.error("Error updating approval record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Approval record not found" });
+      }
+
+      // Determine the new status for the budget record based on the decision
+      let newStatus = "";
+      if (decision === "Approved") {
+        newStatus = "Ready to Publish";
+      } else if (decision === "Disapproved") {
+        newStatus = "Back to Draft";
+      } else {
+        return res
+          .status(400)
+          .json({ status: false, error: "Invalid decision value" });
+      }
+
+      // Set the approval_id update value: null if disapproved, otherwise leave unchanged (approval_id)
+      const approvalIdUpdate = decision === "Disapproved" ? null : approval_id;
+
+      // Update the corresponding budget record where id matches the provided id
+      const updateBudgetSql = `
+        UPDATE budget 
+        SET status = ?, approved_at = NOW(), approval_id = ?
+        WHERE id = ?
+      `;
+      oms_db.query(
+        updateBudgetSql,
+        [newStatus, approvalIdUpdate, id],
+        (err2, budgetResult) => {
+          if (err2) {
+            console.error("Error updating budget record:", err2);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          if (budgetResult.affectedRows === 0) {
+            return res
+              .status(404)
+              .json({ status: false, error: "Budget record not found" });
+          }
+          return res.json({
+            status: true,
+            message: "Decision submitted and budget updated successfully",
+          });
+        }
+      );
+    }
+  );
+});
+
+app.post("/publish-budget", (req, res) => {
+  const { id, approval_id, payments, approved_at, user_data, include_payment } =
+    req.body;
+
+  if (
+    !id ||
+    !approval_id ||
+    !payments ||
+    !Array.isArray(payments) ||
+    !user_data
+  ) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user_data" });
+  }
+
+  // Function to insert a single payment record
+
+  const insertPayment = (payment) => {
+    if (include_payment) {
+      return new Promise((resolve, reject) => {
+        const sql = `
+          INSERT INTO payment 
+            (status, name, amount, description, due_date, approved_at, issued_at, budget_id, approval_id, user_id)
+          VALUES 
+            ('Published', ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+        `;
+        const params = [
+          payment.paymentName, // payment name
+          payment.amount, // amount
+          payment.description, // description
+          payment.dueDate, // due date
+          approved_at, // approved_at provided in the request
+          id, // budget_id from request
+          approval_id, // approval record id
+          userObj.id, // user_id from parsed user_data
+        ];
+        oms_db.query(sql, params, (err, result) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(result.insertId);
+        });
+      });
+    }
+  };
+
+  // Insert all payments and collect their inserted IDs.
+  Promise.all(payments.map(insertPayment))
+    .then((paymentIds) => {
+      const updateBudgetSql = `
+        UPDATE budget 
+        SET published_at = NOW(), payment_ids = ?, status = 'Published', show_other_officers = 0
+        WHERE id = ?
+      `;
+      oms_db.query(
+        updateBudgetSql,
+        [JSON.stringify(paymentIds), id],
+        (err, result) => {
+          if (err) {
+            console.error("Error updating budget:", err);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          if (result.affectedRows === 0) {
+            return res
+              .status(404)
+              .json({ status: false, error: "Budget not found" });
+          }
+          return res.json({
+            status: true,
+            message: "Budget published successfully",
+            paymentIds: paymentIds,
+          });
+        }
+      );
+    })
+    .catch((err) => {
+      console.error("Error inserting payments:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    });
+});
+
+app.post("/fetch-planned-budgets", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      updated_at, 
+      amount, 
+      status
+    FROM budget
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("show_other_officers = 1");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Ready to Publish' THEN 0 
+        WHEN 'Sent for Approval' THEN 1 
+        WHEN 'Back to Draft' THEN 2
+        WHEN 'Draft' THEN 3
+        ELSE 5
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budget) => {
+      if (budget.updated_at !== null) {
+        budget.updated_at = formatDateTableNoTime(budget.updated_at);
+      }
+      budget.amount = "₱ " + budget.amount;
+      return budget;
+    });
+
+    return res.json({ status: true, data: data });
+  });
 });
 
 app.use("/proofs", express.static(path.join(__dirname, "proofs")));

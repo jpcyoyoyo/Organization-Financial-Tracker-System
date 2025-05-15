@@ -42,7 +42,6 @@ import SiteSettings from "./pages/SiteSettings/SiteSettings";
 import RequestAnnouncement from "./pages/RequestAnnouncement/RequestAnnouncement";
 import ManageMeetings from "./pages/ManageMeetings/ManageMeetings";
 import OrganizationDocuments from "./pages/OrganizationDocuments/OrganizationDocuments";
-import Reciepts from "./pages/Receipts/Receipts";
 import Announcements from "./pages/Announcements/Announcements";
 import Events from "./pages/Events/Events";
 import YourAttendances from "./pages/YourAttendances/YourAttendances";
@@ -444,14 +443,6 @@ export default function App() {
                   element={
                     <ProtectedRoute allowedRoutes={allowedRoutes}>
                       <OrganizationDocuments />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="reciepts"
-                  element={
-                    <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <Reciepts />
                     </ProtectedRoute>
                   }
                 />

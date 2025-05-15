@@ -19,25 +19,25 @@ export default function DeleteExpenseModal({
   async function handleDeleteAccount() {
     setLoading(true);
     try {
-      const res = await fetch(`${ip}/delete-deposit`, {
+      const res = await fetch(`${ip}/delete-expense`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
       const result = await res.json();
       if (result.status) {
-        handleShowNotification("Deposit deleted successfully.", "success");
+        handleShowNotification("Expense deleted successfully.", "success");
         if (refreshData) refreshData();
         onClose();
       } else {
         handleShowNotification(
-          result.error || "Deposit deletion failed.",
+          result.error || "Expense deletion failed.",
           "error"
         );
       }
     } catch (error) {
-      console.error("Error deleting deposit:", error);
-      handleShowNotification("Deposit deletion failed due to an error.", error);
+      console.error("Error deleting expense:", error);
+      handleShowNotification("Expense deletion failed due to an error.", error);
     } finally {
       setLoading(false);
     }
@@ -46,15 +46,16 @@ export default function DeleteExpenseModal({
   return (
     <>
       <Modal
-        title="DELETE ACCOUNT"
+        title="DELETE EXPENSE"
         isOpen={isOpen}
         onClose={onClose}
         w="w-11/12 md:h-2/5 md:w-5/9 xl:w-1/3"
       >
         <div className="p-4 h-full w-full">
           <p className="h-1/2">
-            Are you sure you want to permanently delete this deposit? All data
-            related to this deposit including all proofs photos will be deleted.
+            Are you sure you want to permanently delete this expense? All data
+            related to this expense including all proofs and receipt will be
+            deleted.
           </p>
           <div className="flex justify-end mt-10 space-x-2 sm:space-x-4 h-1/2">
             <Button

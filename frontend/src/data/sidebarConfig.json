@@ -47,7 +47,7 @@
           { "path": "/audit-reports", "label": "Audit Reports", "icon": "src/assets/react.svg" },
           { "path": "/financial-statements", "label": "Financial Statements", "icon": "src/assets/react.svg" },
           { "path": "/organization-properties", "label": "Organization Properties", "icon": "src/assets/react.svg" },
-          { "path": "/reciepts", "label": "Reciepts", "icon": "src/assets/react.svg" },
+          { "path": "/receipts", "label": "Receipts", "icon": "src/assets/react.svg" },
           { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
         ],
         "Treasurer": [

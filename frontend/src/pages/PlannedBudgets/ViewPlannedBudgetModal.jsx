@@ -6,7 +6,12 @@ import { motion } from "framer-motion";
 import backIcon from "../../assets/prev.svg";
 import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
 
-export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
+export default function ViewPlannedBudgetModal({
+  isOpen,
+  onClose,
+  id,
+  refreshData,
+}) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -209,7 +214,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                     <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                       <div>
                         <label className="flex font-semibold">
-                          Budget Amount
+                          Tentative Budget Amount
                         </label>
                         <div className="text-2xl">
                           ₱ {calculateOverallBudgetTotal()}
@@ -249,7 +254,11 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                         <label className="flex font-semibold">
                           Approval ID
                         </label>
-                        <div>{details.approval_id}</div>
+                        <div>
+                          {details.approval_id
+                            ? details.approval_id
+                            : "Not Yet Submitted for Approval"}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -690,7 +699,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   );
 }
 
-ViewBudgetModal.propTypes = {
+ViewPlannedBudgetModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,

@@ -35,7 +35,7 @@ const tableConfig = {
       w_expand: "hidden lg:flex w-7/15 lg:w-5/14",
       w_collapse: "hidden md:flex md:w-2/6 lg:w-5/14",
       alignment: "justify-center",
-      mobile: false,
+      mobile: true,
       text_size: "text-sm md:text-base",
       name: "source_name",
     },

@@ -115,21 +115,23 @@ export default function ViewDepositModal({ isOpen, onClose, id, refreshData }) {
                           {JSON.parse(details.breakdown).map((row, idx) => (
                             <tr
                               key={idx}
-                              className="flex w-full text-xs md:text-sm border-b"
+                              className="bg-white flex w-full text-xs md:text-sm border-b py-0.5"
                             >
-                              <td className="w-2/3 p-1">{row.breakdownName}</td>
-                              <td className="w-1/3 p-1">
+                              <td className="w-2/3 p-1 px-2">
+                                {row.breakdownName}
+                              </td>
+                              <td className="w-1/3 p-1 px-2">
                                 ₱ {row.breakdownAmount}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot className="block w-full">
-                          <tr className="flex w-full text-[14px] md:text-sm font-semibold">
-                            <th className="w-2/3 text-left p-1">
+                          <tr className="bg-white flex w-full text-[14px] md:text-sm font-semibold py-0.5">
+                            <th className="w-2/3 text-left p-1 px-2">
                               Total Amount
                             </th>
-                            <th className="w-1/3 text-left p-1">
+                            <th className="w-1/3 text-left p-1 px-2">
                               ₱ {details.amount}
                             </th>
                           </tr>

@@ -1,12 +1,20 @@
 import { useState, useEffect, useContext, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button } from "../../components/ui/button";
+import { useOutletContext } from "react-router-dom";
 import { IpContext } from "../../context/IpContext";
 import { motion } from "framer-motion";
 import backIcon from "../../assets/prev.svg";
-import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
+import Modal from "../../components/ui/modal";
 
-export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
+export default function DecideBudgetApproval({
+  isOpen,
+  onClose,
+  id,
+  refreshData,
+  handleClose,
+}) {
+  const { handleShowNotification } = useOutletContext();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -23,14 +31,15 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   const [includePayments, setIncludePayments] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const errorRef = useRef(null);
-  const [approvalHistory, setApprovalHistory] = useState([]);
-  const [approvalHistoryError, setApprovalHistoryError] = useState("");
-  const [selectedApproval, setSelectedApproval] = useState(null);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showDecisionMessageModal, setShowDecisionMessageModal] =
+    useState(false);
+  const [DecisionMessageMessage, setDecisionMessageMessage] = useState("");
+  const [DecisionMessageError, setDecisionMessageError] = useState("");
+  const [decision, setDecision] = useState("");
+  const userData = sessionStorage.getItem("user");
 
   const ip = useContext(IpContext);
-  const title =
-    details && details.published_at ? "PUBLISHED BUDGET" : "BUDGET APPROVALS";
+  const title = "APPROVE BUDGET";
 
   useEffect(() => {
     if (errorMsg && errorRef.current) {
@@ -78,38 +87,8 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
         setLoading(false);
       }
     }
-
-    async function fetchApprovalHistory() {
-      if (!id) return;
-      try {
-        const response = await fetch(`${ip}/fetch-approval-history`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "Budget", relating_id: id }),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch approval history");
-        }
-        const result = await response.json();
-        if (result.status) {
-          setApprovalHistory(result.data);
-          setApprovalHistoryError("");
-        } else {
-          setApprovalHistory([]);
-          setApprovalHistoryError(
-            result.error || "Failed to fetch approval history"
-          );
-        }
-      } catch (error) {
-        console.error("Error fetching approval history:", error);
-        setApprovalHistory([]);
-        setApprovalHistoryError("Error fetching approval history");
-      }
-    }
-
     if (isOpen) {
       fetchDetails();
-      fetchApprovalHistory();
     }
   }, [isOpen, id, ip]);
 
@@ -131,6 +110,63 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
     payments
       .reduce((acc, payment) => acc + (parseFloat(payment.amount) || 0), 0)
       .toFixed(2);
+
+  // Called when user presses Approved or Disapproved button.
+  const handleDecisionButton = (decisionValue) => {
+    setDecision(decisionValue);
+    setShowDecisionMessageModal(true);
+  };
+
+  const budgetApprovalDecision = async () => {
+    if (!DecisionMessageMessage.trim()) {
+      setDecisionMessageError("Decision message is required.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${ip}/budget-approval-decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          approval_id: details.approval_id,
+          decision,
+          decision_message: DecisionMessageMessage,
+          user_data: userData,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to submit decision");
+      }
+      const result = await response.json();
+      if (result.status) {
+        handleShowNotification(
+          "Budget decision submitted successfully",
+          "success"
+        );
+        setShowDecisionMessageModal(false);
+        refreshData();
+        onClose();
+        handleClose();
+      } else {
+        handleShowNotification(
+          result.error || "Decision submission failed",
+          "error"
+        );
+        setShowDecisionMessageModal(false);
+        refreshData();
+        onClose();
+        handleClose();
+      }
+    } catch (error) {
+      console.error("Error submitting decision:", error);
+      handleShowNotification("Error submitting decision", "error");
+      setShowDecisionMessageModal(false);
+      refreshData();
+      onClose();
+      handleClose();
+    }
+  };
 
   if (!isOpen && !isVisible) return null;
   return (
@@ -180,12 +216,8 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
               <p className="text-xl text-gray-600">Loading...</p>
             </div>
           ) : details ? (
-            <div className="h-[calc(100%-44px)] p-1 sm:p-3">
-              <div
-                className={`mt-2 md:mt-0 ${
-                  details.published_at ? "h-full" : "h-9/10"
-                } overflow-y-auto`}
-              >
+            <div className="h-full p-1 sm:p-3">
+              <div className="mt-2 md:mt-0 h-9/10 overflow-y-auto">
                 <motion.div
                   initial={{ opacity: 0.1, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -209,7 +241,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                     <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                       <div>
                         <label className="flex font-semibold">
-                          Budget Amount
+                          Tentative Budget Amount
                         </label>
                         <div className="text-2xl">
                           ₱ {calculateOverallBudgetTotal()}
@@ -227,92 +259,26 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                         </label>
                         <div>{details.updated_at}</div>
                       </div>
-                      <div>
-                        <label className="flex font-semibold">
-                          Date Approved
-                        </label>
-                        <div>
-                          {details.approved_at !== null
-                            ? details.approved_at
-                            : "Not Yet Approved"}
-                        </div>
-                      </div>
-                      {details.published_at && (
-                        <div>
-                          <label className="flex font-semibold">
-                            Date Published
-                          </label>
-                          <div>{details.published_at}</div>
-                        </div>
-                      )}
-                      <div>
-                        <label className="flex font-semibold">
-                          Approval ID
-                        </label>
-                        <div>{details.approval_id}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 px-4 pb-4">
-                    <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Approval History
-                    </h2>
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="bg-sky-300 text-sm">
-                            <th className="p-2 text-left">ID</th>
-                            <th className="p-2 text-left">Decision</th>
-                            <th className="p-2 text-left">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {approvalHistoryError ? (
-                            <tr>
-                              <td
-                                colSpan="3"
-                                className="p-2 text-center text-red-600"
-                              >
-                                {approvalHistoryError}
-                              </td>
-                            </tr>
-                          ) : approvalHistory.length === 0 ? (
-                            <tr>
-                              <td colSpan="3" className="p-2 text-center">
-                                No approval history
-                              </td>
-                            </tr>
-                          ) : (
-                            approvalHistory.map((record, idx) => (
-                              <tr key={idx} className="bg-white text-sm">
-                                <td className="px-2 py-1 border-r">
-                                  {record.id}
-                                </td>
-                                <td className="px-2 py-1 border-r">
-                                  {record.decision !== null
-                                    ? record.decision
-                                    : "Pendeing"}
-                                </td>
-                                <td className="px-2 py-1">
-                                  <Button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedApproval(record);
-                                      setShowApprovalModal(true);
-                                    }}
-                                    className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-2 py-1 rounded"
-                                  >
-                                    View
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
                     </div>
                   </div>
                 </motion.div>
+              </div>
+              <div className="flex justify-end items-center space-x-2 h-1/10">
+                {/* Approved and Disapproved Buttons */}
+                <Button
+                  type="button"
+                  onClick={() => handleDecisionButton("Approved")}
+                  className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-green-800 bg-green-600 text-white px-4 py-2 rounded h-fit"
+                >
+                  Approved
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handleDecisionButton("Disapproved")}
+                  className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-red-800 bg-red-600 text-white px-4 py-2 rounded h-fit"
+                >
+                  Disapproved
+                </Button>
               </div>
             </div>
           ) : (
@@ -411,87 +377,10 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                           </div>
                           <div>
                             <label className="flex font-semibold">
-                              Date Updated
+                              Date Approved
                             </label>
                             <div>{details.updated_at}</div>
                           </div>
-                          <div>
-                            <label className="flex font-semibold">
-                              Date Approved
-                            </label>
-                            <div>
-                              {details.approved_at !== null
-                                ? details.approved_at
-                                : "Not Yet Approved"}
-                            </div>
-                          </div>
-                          {details.published_at && (
-                            <div>
-                              <label className="flex font-semibold">
-                                Date Published
-                              </label>
-                              <div>{details.published_at}</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-4 px-4 pb-4">
-                        <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                          Approval History
-                        </h2>
-                        <div className="overflow-x-auto border rounded-lg">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="bg-sky-300 text-sm">
-                                <th className="p-2 text-left">ID</th>
-                                <th className="p-2 text-left">Decision</th>
-                                <th className="p-2 text-left">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {approvalHistoryError ? (
-                                <tr>
-                                  <td
-                                    colSpan="3"
-                                    className="p-2 text-center text-red-600"
-                                  >
-                                    {approvalHistoryError}
-                                  </td>
-                                </tr>
-                              ) : approvalHistory.length === 0 ? (
-                                <tr>
-                                  <td colSpan="3" className="p-2 text-center">
-                                    No approval history
-                                  </td>
-                                </tr>
-                              ) : (
-                                approvalHistory.map((record, idx) => (
-                                  <tr key={idx} className="bg-white text-sm">
-                                    <td className="px-2 py-1 border-r">
-                                      {record.id}
-                                    </td>
-                                    <td className="px-2 py-1 border-r">
-                                      {record.decision !== null
-                                        ? record.decision
-                                        : "Pendeing"}
-                                    </td>
-                                    <td className="px-2 py-1">
-                                      <Button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedApproval(record);
-                                          setShowApprovalModal(true);
-                                        }}
-                                        className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-2 py-1 rounded"
-                                      >
-                                        View
-                                      </Button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
                         </div>
                       </div>
                     </motion.div>
@@ -673,27 +562,92 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
               <p>Fail to fetch details</p>
             </div>
           )}
+          {isMobile && (
+            <div className="flex justify-end items-center space-x-2 p-4">
+              <Button
+                type="button"
+                onClick={() => handleDecisionButton("Approved")}
+                className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-green-800 bg-green-600 text-white px-4 py-2 rounded text-sm"
+              >
+                Approved
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleDecisionButton("Disapproved")}
+                className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-red-800 bg-red-600 text-white px-4 py-2 rounded text-sm"
+              >
+                Disapproved
+              </Button>
+            </div>
+          )}
         </motion.div>
       </div>
 
-      {showApprovalModal && selectedApproval && (
-        <ApprovalDetailsModal
-          isOpen={showApprovalModal}
-          approvalId={selectedApproval.id}
+      {showDecisionMessageModal && (
+        <Modal
+          title="SUBMIT DECISION MESSAGE"
+          isOpen={showDecisionMessageModal}
           onClose={() => {
-            setShowApprovalModal(false);
-            setSelectedApproval(null);
+            setShowDecisionMessageModal(false);
+            setDecisionMessageMessage("");
+            setDecisionMessageError("");
           }}
-        />
+          modalCenter={true}
+          w={"w-11/12 h-11/12 md:h-4/7 md:w-4/7 lg:w-3/7 xl:w-3/7"}
+        >
+          <div className="p-4 h-7/9">
+            <textarea
+              value={DecisionMessageMessage}
+              onChange={(e) => {
+                setDecisionMessageMessage(e.target.value);
+                setDecisionMessageError("");
+              }}
+              placeholder="Enter your Decision message here..."
+              className="w-full h-full border rounded p-2 mb-2"
+            />
+            {DecisionMessageError && (
+              <p className="text-red-600 text-sm mb-2">
+                {DecisionMessageError}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end space-x-2 h-2/9 p-4">
+            <Button
+              type="button"
+              onClick={() => {
+                setShowDecisionMessageModal(false);
+                setDecisionMessageMessage("");
+                setDecisionMessageError("");
+              }}
+              className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-gray-800 bg-gray-400 text-white px-4 py-2 rounded h-fit"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!DecisionMessageMessage.trim()) {
+                  setDecisionMessageError("Decision message is required.");
+                  return;
+                }
+                budgetApprovalDecision();
+              }}
+              className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-purple-800 bg-purple-600 text-white px-4 py-2 rounded h-fit"
+            >
+              Confirm Decision
+            </Button>
+          </div>
+        </Modal>
       )}
     </>
   );
 }
 
-ViewBudgetModal.propTypes = {
+DecideBudgetApproval.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,
+  handleClose: PropTypes.func,
   rowData: PropTypes.object,
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   updateModal: PropTypes.elementType,

@@ -1,10 +1,13 @@
 import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/maincontent";
 import SearchListCard from "../../components/ui/searchlistcard";
+import { useContext } from "react";
+import { IpContext } from "../../context/IpContext";
 import ViewBudgetModal from "./ViewBudgetModal";
 
 export default function Budgets() {
   const { isCollapsed } = useOutletContext();
+  const ip = useContext(IpContext);
 
   const listConfig = {
     columns: [
@@ -15,17 +18,17 @@ export default function Budgets() {
         w_expand: "w-full md:w-8/15 lg:w-9/12",
         w_collapse: "w-full md:w-5/7 lg:w-4/5",
         variables: [
-          { key: "", name: "budgetName", mobile: true },
-          { key: "Total Budget", name: "totalBudget", mobile: true },
+          { key: "", name: "name", mobile: true },
+          { key: "Total Budget", name: "amount", mobile: true },
         ],
         mobile: true,
       },
       {
         type: "single",
         w_expand: "w-7/15 lg:w-3/12",
-        w_collapse: "md:w-2/7 lg:lg:w-1/5",
-        key: "Date Approved",
-        name: "dateApproved",
+        w_collapse: "md:w-2/7 lg:w-1/5",
+        key: "Date Published",
+        name: "published_at",
         mobile: true,
       },
     ],
@@ -81,11 +84,11 @@ export default function Budgets() {
       showContentNameMobileOnly={true}
     >
       <SearchListCard
-        cardName="APPROVED BUDGETS"
+        cardName="PUBLISHED BUDGETS"
         listConfig={listConfig}
-        fetchUrl="http://192.168.100.68/fetch-budgets"
+        fetchUrl={`${ip}/fetch-published-budgets`}
         isCollapsed={isCollapsed}
-        testMode={true}
+        testMode={false}
         testData={testData}
         viewModal={ViewBudgetModal}
       />

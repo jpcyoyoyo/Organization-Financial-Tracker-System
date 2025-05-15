@@ -44,11 +44,11 @@ export default function SearchListCard({
   testData, // Expected shape: { data, years }
   cardSize = "h-87 md:h-97",
   mobileCardSize = "h-120",
+  itemsPerPage = 5,
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
   // ------------------------------
-  const itemsPerPage = 5;
   const [data, setData] = useState([]);
   const [isNewData, setIsNewData] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -73,12 +73,31 @@ export default function SearchListCard({
   const [selectedRow, setSelectedRow] = useState(null);
 
   const lastDataRef = useRef(null);
+  const timerRef = useRef(null);
+  const containerRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
 
   // Update window width on resize
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+      },
+      { threshold: 0.1 }
+    );
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (containerRef.current) observer.unobserve(containerRef.current);
+    };
   }, []);
 
   const getMode = useCallback(() => {
@@ -107,6 +126,11 @@ export default function SearchListCard({
   }, [userData, searchTerm, year, startDate, endDate, getMode]);
 
   const fetchData = useCallback(async () => {
+    if (!isVisible) {
+      console.log("Current tab is not active, skipping fetch");
+      setFetching(false);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -129,17 +153,34 @@ export default function SearchListCard({
       if (sortedData !== data) {
         setData(sortedData);
       }
-
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
+
+      if (sortedData.length === 0 && data.length === 0) {
+        console.warn(
+          "No records found, attempting to fetch again in 5 seconds..."
+        );
+        timerRef.current = setTimeout(fetchData, 60000);
+      }
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
       setError(error.message);
+      timerRef.current = setTimeout(fetchData, 60000);
+      console.log("Reattempt fetching");
     } finally {
       setLoading(false);
       setFetching(false);
     }
-  }, [fetchUrl, requestBody, data]);
+  }, [isVisible, fetchUrl, requestBody, data]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        setFetching(false);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -164,7 +205,12 @@ export default function SearchListCard({
           new Date(b.dateDeposited || b.dateApproved) -
           new Date(a.dateDeposited || a.dateApproved)
       );
-      setData(sortedTestData);
+
+      // Prevent infinite loop by checking if data already matches
+      if (!deepEqual(data, sortedTestData)) {
+        setData(sortedTestData);
+      }
+
       setAvailableYears(testData.years || []);
     } else {
       if (fetching) {
@@ -175,7 +221,7 @@ export default function SearchListCard({
         console.log("Fetching data...");
       }
     }
-  }, [testMode, testData, fetchData, fetching, data]);
+  }, [testMode, testData, fetching, fetchData, data]);
 
   function handleSearch() {
     if (testMode && testData && Array.isArray(testData.data)) {
@@ -349,7 +395,7 @@ export default function SearchListCard({
   // Render
   // ------------------------------
   return (
-    <div className="font-[archivo] text-gray-800 relative">
+    <div ref={containerRef} className="font-[archivo] text-gray-800 relative">
       {/* Filter Popup */}
       {filterOpen && (
         <FilterPopup
@@ -485,7 +531,9 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 1 }}
-              className="h-107.5 md:h-112 flex items-center justify-center"
+              className={`mt-2 ${
+                cardSize || "h-124 md:h-128"
+              } flex items-center justify-center`}
             >
               <p className="text-sm text-gray-600">{loadingMessage}</p>
             </motion.div>
@@ -717,7 +765,9 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.75 }}
-              className="h-107.5 md:h-112 flex items-center justify-center"
+              className={`mt-2 ${
+                cardSize || "h-124 md:h-128"
+              } flex items-center justify-center`}
             >
               <p className="text-sm text-gray-600">
                 {error ? error : "No record found."}
@@ -831,4 +881,5 @@ SearchListCard.propTypes = {
   }),
   cardSize: PropTypes.string,
   mobileCardSize: PropTypes.string,
+  itemsPerPage: PropTypes.number,
 };

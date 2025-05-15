@@ -44,7 +44,7 @@ export default function Modal({
         animate={isVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className={`transition-all duration-300 bg-white rounded-xl shadow-lg p-2 pt-15 ${w} max-w-7xl relative`}
+        className={`transition-all duration-300 bg-white rounded-xl shadow-lg p-2 pt-13 ${w} max-w-7xl relative`}
       >
         <div className="absolute top-0 left-0 flex flex-row h-11 w-full">
           <Button
@@ -58,7 +58,7 @@ export default function Modal({
             <h1 className="hidden sm:block">Back</h1>
           </Button>
           {title && (
-            <h2 className="bg-[#EFB034] text-2xl italic w-full rounded-tr-xl font-semibold text-gray-800 pl-3 sm:px-4 md:px-8 py-1.5 truncate">
+            <h2 className="bg-[#EFB034] text-2xl italic w-full rounded-tr-xl font-semibold text-gray-800 pl-3 sm:px-4 py-1.5 truncate">
               {title}
             </h2>
           )}

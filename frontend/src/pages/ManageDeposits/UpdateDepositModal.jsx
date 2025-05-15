@@ -391,13 +391,13 @@ export default function UpdateDepositModal({
                               <Button
                                 type="button"
                                 onClick={() => removeBreakdownRow(index)}
-                                className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                className="transition-all duration-150 transform hover:scale-105 bg-red-500 text-white px-2 py-1 rounded text-xs cursor-pointer"
                               >
                                 {isMobile ? (
                                   <img
                                     src={icons["src/assets/delete.svg"]}
                                     alt="Remove row"
-                                    className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
+                                    className="w-4 h-4 object-cover rounded"
                                   />
                                 ) : (
                                   <p>Remove</p>
@@ -604,7 +604,7 @@ export default function UpdateDepositModal({
             <div className="flex justify-end mt-4">
               <Button
                 type="submit"
-                className="bg-green-600 text-white px-4 py-2 rounded"
+                className="bg-blue-600 text-sm md:text-base text-white px-4 py-2 rounded cursor-pointer transition-all duration-150 hover:bg-blue-800 transform hover:scale-105 flex items-center"
                 disabled={updating}
               >
                 {updating ? "Updating Deposit..." : "Update Deposit"}

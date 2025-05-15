@@ -55,7 +55,7 @@ import deepEqual from "fast-deep-equal";
 
 export default function SearchTableCard({
   cardName,
-  userData, // JSON string with user data
+  userData,
   tableConfig,
   fetchUrl,
   isCollapsed,
