@@ -5,8 +5,9 @@ import {
   useState,
   useMemo,
   useCallback,
+  useRef,
 } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import PropTypes from "prop-types";
 import configData from "../../data/sidebarConfig.json";
 import Logo from "../../components/ui/logo";
@@ -46,6 +47,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     return JSON.parse(sessionStorage.getItem("user")) || {};
   });
 
+  const location = useLocation();
+  const scrollRef = useRef(null);
+
   useEffect(() => {
     const updateUserData = () => {
       const updatedUser = JSON.parse(sessionStorage.getItem("user"));
@@ -80,6 +84,19 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       setIsCollapsed(true);
     }
   }, [setIsCollapsed]);
+
+  // When the location changes, scroll the active tab into view (at the top)
+  useEffect(() => {
+    if (scrollRef.current) {
+      const activeTab = scrollRef.current.querySelector(".active-tab");
+      if (activeTab) {
+        scrollRef.current.scrollTo({
+          top: activeTab.offsetTop,
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [location.pathname]);
 
   return (
     <>
@@ -122,7 +139,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   : "block opacity-100 scale-100"
               }`}
             >
-              COMSOC OMS
+              COMSOC OFS
             </span>
           </div>
 
@@ -143,7 +160,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             {!isCollapsed && (
               <NavLink
                 to="/editprofile"
-                className="flex justify-items-center w-16 px-3 py-2 rounded-xl text-base text-center transition hover:-translate-y-0.5 bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e]"
+                className="hidden justify-items-center w-16 px-3 py-2 rounded-xl text-base text-center transition hover:-translate-y-0.5 bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e]"
               >
                 Edit
               </NavLink>
@@ -156,7 +173,10 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             isCollapsed ? "hidden md:block" : "block"
           } relative h-full overflow-hidden`}
         >
-          <div className="mt-5 overflow-y-auto max-h-[calc(100vh-136px)]">
+          <div
+            className="mt-5 overflow-y-auto max-h-[calc(100vh-136px)]"
+            ref={scrollRef}
+          >
             <ul className="space-y-0.5">
               {config.topLevelTabs.map((tab) => (
                 <li key={tab.path}>
@@ -168,7 +188,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                         isCollapsed ? "justify-center" : ""
                       } ${
                         isActive
-                          ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5"
+                          ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
                           : "hover:bg-[#9494945d]"
                       }`
                     }
@@ -207,7 +227,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                             isCollapsed ? "justify-center" : ""
                           } ${
                             isActive
-                              ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5"
+                              ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
                               : "hover:bg-[#9494945d]"
                           }`
                         }

@@ -8,7 +8,7 @@ import backIcon from "../../assets/prev.svg";
 import Modal from "../../components/ui/modal";
 import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
 
-export default function ViewDraftBudgetModal({
+export default function ViewDraftEventModal({
   isOpen,
   onClose,
   id,
@@ -861,7 +861,7 @@ export default function ViewDraftBudgetModal({
   );
 }
 
-ViewDraftBudgetModal.propTypes = {
+ViewDraftEventModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,

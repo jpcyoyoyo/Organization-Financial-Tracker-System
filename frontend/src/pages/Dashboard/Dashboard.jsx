@@ -2,7 +2,6 @@ import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/maincontent";
 import TableCard from "../../components/ui/tablecard";
 import DataCard from "../../components/ui/datacard";
-import TextCard from "../../components/ui/textcard";
 import { motion } from "framer-motion";
 import { useMemo, useContext } from "react";
 import { IpContext } from "../../context/IpContext";
@@ -70,19 +69,7 @@ export default function Dashboard() {
               navUrl="/your-payments"
               userData={userData}
               h="h-47 md:h-57"
-              w={`w-full ${
-                isCollapsed ? "lg:w-11/25" : "xl:w-11/25 lg:w-full"
-              }`}
-            />
-            <TextCard
-              title="ANNOUNCEMENTS"
-              fetchUrl={`${ip}/fetch-users`}
-              navUrl="/your-payments"
-              userData={userData}
-              h="h-47 md:h-57"
-              w={`w-full ${
-                isCollapsed ? "lg:w-14/25" : "xl:w-14/25 lg:w-full"
-              }`}
+              w={`w-full`}
             />
           </div>
           <div
@@ -111,13 +98,7 @@ export default function Dashboard() {
               name="latest_org_expense"
             />
             <DataCard
-              title="YOUR TOTAL PAID PAYMENT"
-              fetchUrl={fetchUrls.yourTotalPaidPayment}
-              id={userData.id}
-              name="your_total_paid_payment"
-            />
-            <DataCard
-              title="YOUR TOTAL UNPAID PAYMENT"
+              title="YOUR TOTAL PAYMENTS"
               fetchUrl={fetchUrls.yourTotalUnpaidPayment}
               id={userData.id}
               name="your_total_unpaid_payment"

@@ -746,7 +746,7 @@ export default function ViewManageDepositModal({
           </>
         ) : details ? (
           // Read-only details view for issued deposit
-          <div className="sm:p-2 md:p-6h-full h-full w-full">
+          <div className="sm:p-2 md:p-6 h-full w-full">
             <div className="h-9/10">
               <div className="overflow-y-auto bg-[#c7ff882f] border rounded-lg w-full h-full">
                 <div className="flex flex-col md:flex-row bg-lime-500 p-2">

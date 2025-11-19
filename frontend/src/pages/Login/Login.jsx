@@ -40,7 +40,7 @@ export default function LoginPage({ setIsAuthenticated }) {
                     COMSOC
                   </h1>
                   <p className="mt-1.5 sm:mt-4 text-sm sm:text-2xl font-bold text-black pl-4 sm:px-4">
-                    ORGANIZATION MANAGEMENT SYSTEM
+                    ORGANIZATION FINANCIAL SYSTEM
                   </p>
                 </div>
               </div>

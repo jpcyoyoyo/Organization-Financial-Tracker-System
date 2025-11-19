@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
 const fs = require("fs");
 const multer = require("multer");
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 
 const app = express();
 app.use(morgan("dev"));
@@ -204,6 +204,34 @@ app.post("/login", async (req, res) => {
         details: String(
           `User account retrive succussfully. Ready for password comparison.\n\n\t- User ID: ${user.id}`
         ),
+      });
+    }
+
+    if (platform === "mobile" && user.designation !== "Member") {
+      logActivity({
+        user_id: user.id,
+        tab: "Login",
+        activity: "Login Attempt",
+        status: 1,
+        summary: "Mobile login restricted",
+        details: `User with designation "${user.designation}" is not allowed to login on mobile.`,
+      });
+      return res
+        .status(403)
+        .json({ error: "Mobile login is only available for Members." });
+    }
+
+    if (parseInt(user.is_enrolled, 10) === 0) {
+      logActivity({
+        user_id: user.id,
+        tab: "Login",
+        activity: "Login Attempt",
+        status: 1,
+        summary: "User not enrolled",
+        details: `User with Student ID: ${user.student_id} is not enrolled.`,
+      });
+      return res.status(403).json({
+        error: "Your not enrolled. Please contact the adviser.",
       });
     }
 
@@ -439,7 +467,7 @@ app.post("/create-account", async (req, res) => {
 
   // Insert the new user first with minimal info
   const insertUserSql =
-    "INSERT INTO user_account (full_name, student_id, email, section_id) VALUES (?, ?, ?, ?)";
+    "INSERT INTO user_account (full_name, student_id, email, section_id, status, is_enrolled) VALUES (?, ?, ?, ?, 'Not Enrolled', 0)";
   oms_db.query(
     insertUserSql,
     [full_name, student_id, email, section_id],
@@ -549,6 +577,221 @@ app.post("/create-account", async (req, res) => {
   );
 });
 
+app.post("/bulk-create-accounts", (req, res) => {
+  const rows = req.body; // expecting an array of objects
+  if (!Array.isArray(rows)) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Invalid input; expected an array." });
+  }
+
+  // Retrieve all sections (id and name) for lookup
+  const sectionQuery = "SELECT id, name FROM section";
+  oms_db.query(sectionQuery, (secErr, secResults) => {
+    if (secErr) {
+      console.error("Error retrieving sections:", secErr);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    // Build a lookup map: section name => section id
+    const sectionMap = {};
+    secResults.forEach((sec) => {
+      sectionMap[sec.name] = sec.id;
+    });
+
+    let processed = [];
+    let errors = [];
+
+    function processRow(i) {
+      if (i >= rows.length) {
+        return res.json({ status: true, processed, errors });
+      }
+      const row = rows[i];
+      // Expected row fields: StudentID, FullName, Email, Section, Status
+      const { StudentID, FullName, Email, Section, Status } = row;
+      const section_id = sectionMap[Section] || null;
+      const is_enrolled = Status === "Continuing" ? 1 : 0;
+
+      if (!StudentID || !FullName || !Email || !section_id || !Status) {
+        errors.push({ StudentID, error: "Missing required fields in row" });
+        return processRow(i + 1);
+      }
+
+      // Check if a user with the given StudentID exists
+      const checkUserSql =
+        "SELECT id, designation FROM user_account WHERE student_id = ?";
+      oms_db.query(checkUserSql, [StudentID], (chkErr, userRows) => {
+        if (chkErr) {
+          errors.push({ StudentID, error: chkErr.message });
+          return processRow(i + 1);
+        }
+        if (userRows.length > 0) {
+          // Existing account: update status, is_enrolled and section_id.
+          const user = userRows[0];
+          const user_id = user.id;
+          const existingDesig = user.designation;
+
+          // If the existing designation is 'Representative', clear their current section representative...
+          if (existingDesig === "Representative") {
+            // Set representative = NULL in any section where this user is representative
+            const clearRepSql =
+              "UPDATE section SET representative = NULL WHERE representative = ?";
+            oms_db.query(clearRepSql, [user_id], (clearErr) => {
+              if (clearErr) {
+                errors.push({
+                  StudentID,
+                  error: "Error clearing representative: " + clearErr.message,
+                });
+              }
+              // Then update new section to set representative = user_id.
+              const setRepSql =
+                "UPDATE section SET representative = ? WHERE id = ?";
+              oms_db.query(setRepSql, [user_id, section_id], (setErr) => {
+                if (setErr) {
+                  errors.push({
+                    StudentID,
+                    error:
+                      "Error setting new representative: " + setErr.message,
+                  });
+                }
+              });
+            });
+          }
+          const updateUserSql =
+            "UPDATE user_account SET status = ?, is_enrolled = ?, section_id = ? WHERE id = ?";
+          oms_db.query(
+            updateUserSql,
+            [Status, is_enrolled, section_id, user_id],
+            (updErr) => {
+              if (updErr) {
+                errors.push({ StudentID, error: updErr.message });
+              } else {
+                processed.push({ StudentID, action: "updated", user_id });
+              }
+              processRow(i + 1);
+            }
+          );
+        } else {
+          // New account: insert minimal record, then update settings.
+          const insertUserSql = `
+            INSERT INTO user_account (full_name, student_id, email, section_id, status, is_enrolled)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `;
+          oms_db.query(
+            insertUserSql,
+            [FullName, StudentID, Email, section_id, Status, is_enrolled],
+            (insErr, insResult) => {
+              if (insErr) {
+                errors.push({ StudentID, error: insErr.message });
+                return processRow(i + 1);
+              }
+              const user_id = insResult.insertId;
+              // Increment section's student_no
+              const incrSql =
+                "UPDATE section SET student_no = student_no + 1 WHERE id = ?";
+              oms_db.query(incrSql, [section_id], (incrErr) => {
+                if (incrErr) {
+                  console.error(
+                    "Error incrementing section student_no:",
+                    incrErr
+                  );
+                }
+              });
+              // Generate a random password and hash it.
+              const generatedPassword = generatePassword(8);
+              bcrypt.hash(generatedPassword, 10, (hashErr, hashedPassword) => {
+                if (hashErr) {
+                  errors.push({
+                    StudentID,
+                    error: "Password hash error: " + hashErr.message,
+                  });
+                  return processRow(i + 1);
+                }
+                // Insert default settings.
+                const insertSettingsSql =
+                  "INSERT INTO settings (user_id, theme) VALUES (?, ?)";
+                oms_db.query(
+                  insertSettingsSql,
+                  [user_id, "default"],
+                  (setErr, settingsResult) => {
+                    if (setErr) {
+                      errors.push({
+                        StudentID,
+                        error: "Settings insert error: " + setErr.message,
+                      });
+                      return processRow(i + 1);
+                    }
+                    const settings_id = settingsResult.insertId;
+                    // Insert default security question entry.
+                    const insertSecuritySql =
+                      "INSERT INTO security_q (user_id) VALUES (?)";
+                    oms_db.query(
+                      insertSecuritySql,
+                      [user_id],
+                      (secErr, secResult) => {
+                        if (secErr) {
+                          errors.push({
+                            StudentID,
+                            error: "Security insert error: " + secErr.message,
+                          });
+                          return processRow(i + 1);
+                        }
+                        const security_q_id = secResult.insertId;
+                        // Update user_account with generated password, hashed password, etc.
+                        const profilePic = "src/assets/profile_default.svg";
+                        const updateUserSql = `
+                    UPDATE user_account SET 
+                      initial_password = ?, 
+                      password = ?,
+                      profile_pic = ?,
+                      security_q_id = ?,
+                      settings_id = ?,
+                      designation = ?
+                    WHERE id = ?
+                  `;
+                        // New accounts default to 'Member'
+                        oms_db.query(
+                          updateUserSql,
+                          [
+                            generatedPassword,
+                            hashedPassword,
+                            profilePic,
+                            security_q_id,
+                            settings_id,
+                            "Member",
+                            user_id,
+                          ],
+                          (updErr) => {
+                            if (updErr) {
+                              errors.push({
+                                StudentID,
+                                error: "User update error: " + updErr.message,
+                              });
+                            } else {
+                              processed.push({
+                                StudentID,
+                                action: "created",
+                                user_id,
+                              });
+                            }
+                            processRow(i + 1);
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              });
+            }
+          );
+        }
+      });
+    }
+    processRow(0);
+  });
+});
+
 app.post("/fetch-user-details", (req, res) => {
   const { id } = req.body;
   if (!id) {
@@ -572,6 +815,7 @@ app.post("/fetch-user-details", (req, res) => {
       ua.is_login_web,
       ua.is_login_mobile,
       ua.e_signature,
+      ua.status,
       ua.qr_code
     FROM user_account ua
     LEFT JOIN section s ON ua.section_id = s.id
@@ -603,6 +847,7 @@ app.post("/update-account", async (req, res) => {
     section_id,
     designation,
     new_password,
+    status,
   } = req.body;
 
   if (
@@ -611,7 +856,8 @@ app.post("/update-account", async (req, res) => {
     !student_id ||
     !email ||
     !section_id ||
-    !designation
+    !designation ||
+    !status
   ) {
     return res
       .status(400)
@@ -629,6 +875,8 @@ app.post("/update-account", async (req, res) => {
     "Peace Officer",
   ];
 
+  const is_enrolled = status === "Continuing" ? 1 : 0;
+
   try {
     let updateQuery;
     let updateValues;
@@ -642,6 +890,8 @@ app.post("/update-account", async (req, res) => {
           email = ?, 
           section_id = ?, 
           designation = ?,
+          status = ?,
+          is_enrolled = ?,
           initial_password = ?, 
           password = ?
         WHERE id = ?`;
@@ -651,6 +901,8 @@ app.post("/update-account", async (req, res) => {
         email,
         section_id,
         designation,
+        status,
+        is_enrolled,
         new_password,
         hashedPassword,
         id,
@@ -662,7 +914,9 @@ app.post("/update-account", async (req, res) => {
           student_id = ?, 
           email = ?, 
           section_id = ?, 
-          designation = ?
+          designation = ?,
+          status = ?,
+          is_enrolled = ?
         WHERE id = ?`;
       updateValues = [
         full_name,
@@ -670,6 +924,8 @@ app.post("/update-account", async (req, res) => {
         email,
         section_id,
         designation,
+        status,
+        is_enrolled,
         id,
       ];
     }
@@ -3918,8 +4174,8 @@ app.post("/fetch-published-budgets", (req, res) => {
 });
 
 app.post("/cancel-budget-approval", (req, res) => {
-  const { id, past_approval_id, approval_id, user_data } = req.body;
-  if (!id || !approval_id || !user_data || !past_approval_id) {
+  const { id, approval_id, user_data } = req.body;
+  if (!id || !approval_id || !user_data) {
     return res
       .status(400)
       .json({ status: false, error: "Missing required fields" });
@@ -3955,28 +4211,22 @@ app.post("/cancel-budget-approval", (req, res) => {
       UPDATE budget 
       SET status = 'Back to Draft', 
           show_other_officers = 0, 
-          past_approval_ids = ?, 
           approval_id = NULL 
       WHERE id = ?
     `;
       // Ensure past_approval_id is stored as JSON (if needed)
-      const pastApprovalIDs = JSON.stringify(past_approval_id);
-      oms_db.query(
-        updateBudgetSql,
-        [pastApprovalIDs, id],
-        (err, budgetResult) => {
-          if (err) {
-            console.error("Error updating budget record:", err);
-            return res
-              .status(500)
-              .json({ status: false, error: "Internal Server Error" });
-          }
-          return res.json({
-            status: true,
-            message: "Budget approval cancelled successfully",
-          });
+      oms_db.query(updateBudgetSql, [id], (err, budgetResult) => {
+        if (err) {
+          console.error("Error updating budget record:", err);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
         }
-      );
+        return res.json({
+          status: true,
+          message: "Budget approval cancelled successfully",
+        });
+      });
     }
   );
 });
@@ -4323,6 +4573,7 @@ app.post("/fetch-decided-approvals", (req, res) => {
       name, 
       updated_at, 
       name, 
+      type,
       relating_id,
       decision
     FROM approval
@@ -4387,8 +4638,14 @@ app.post("/fetch-decided-approvals", (req, res) => {
       paymentApprovals.updated_at = formatDateTableNoTime(
         paymentApprovals.updated_at
       );
-      paymentApprovals.relating_id =
-        "Budget ID - " + paymentApprovals.relating_id;
+      if (paymentApprovals.type === "Budget") {
+        paymentApprovals.relating_id =
+          "Budget ID - " + paymentApprovals.relating_id;
+      } else if (paymentApprovals.type === "Payment") {
+        paymentApprovals.relating_id =
+          "Payment ID - " + paymentApprovals.relating_id;
+      }
+
       return paymentApprovals;
     });
 
@@ -4504,7 +4761,7 @@ app.post("/publish-budget", (req, res) => {
           INSERT INTO payment 
             (status, name, amount, description, due_date, approved_at, issued_at, budget_id, approval_id, user_id)
           VALUES 
-            ('Published', ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+            ('Issued', ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
         `;
         const params = [
           payment.paymentName, // payment name
@@ -4563,6 +4820,51 @@ app.post("/publish-budget", (req, res) => {
         .status(500)
         .json({ status: false, error: "Internal Server Error" });
     });
+});
+
+app.post("/delete-draft-budget", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Budget ID is required" });
+  }
+
+  // Optionally, fetch the budget details first (for logging or further deletion of related data)
+  const selectSql = "SELECT id, payments FROM budget WHERE id = ?";
+  oms_db.query(selectSql, [id], (selectErr, selectResults) => {
+    if (selectErr) {
+      console.error("Error selecting draft budget:", selectErr);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (selectResults.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Draft budget not found" });
+    }
+
+    // Delete the draft budget record from the budget table
+    const deleteSql = "DELETE FROM budget WHERE id = ?";
+    oms_db.query(deleteSql, [id], (deleteErr, deleteResult) => {
+      if (deleteErr) {
+        console.error("Error deleting draft budget:", deleteErr);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (deleteResult.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Draft budget not found" });
+      }
+      return res.json({
+        status: true,
+        message: "Draft budget deleted successfully",
+      });
+    });
+  });
 });
 
 app.post("/fetch-planned-budgets", (req, res) => {
@@ -4630,7 +4932,7 @@ app.post("/fetch-planned-budgets", (req, res) => {
         WHEN 'Sent for Approval' THEN 1 
         WHEN 'Back to Draft' THEN 2
         WHEN 'Draft' THEN 3
-        ELSE 5
+        ELSE 4
       END,
       updated_at DESC
   `;
@@ -4654,6 +4956,1229 @@ app.post("/fetch-planned-budgets", (req, res) => {
 
     return res.json({ status: true, data: data });
   });
+});
+
+app.post("/fetch-draft-payments", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      amount, 
+      status
+    FROM payment
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push(
+    "status IN ('Draft', 'Back to Draft', 'Sent for Approval', 'Ready to Issue')"
+  );
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(updated_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("updated_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("updated_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Ready to Issue' THEN 0 
+        WHEN 'Sent for Approval' THEN 1 
+        WHEN 'Back to Draft' THEN 2
+        WHEN 'Draft' THEN 3
+        ELSE 4
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft budgets:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((budget) => {
+      budget.created_at = formatDateTableNoTime(budget.created_at);
+      budget.amount = "₱ " + budget.amount;
+      return budget;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-issued-payments", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to budgets with status 'Draft' or 'Back to Draft'
+  let sql = "SELECT id, name, issued_at, amount FROM payment";
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status = 'Issued'");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(issued_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("issued_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("issued_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY issued_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching published payment:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each budget record if not null.
+    const data = results.map((payment) => {
+      payment.issued_at = formatDateTableNoTime(payment.issued_at);
+      payment.amount = "₱ " + payment.amount;
+      return payment;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+// Route to check if a payment with the given name already exists
+app.post("/check-payment-exist", (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Payment name is required" });
+  }
+  const sql = "SELECT id FROM payment WHERE name = ? LIMIT 1";
+  oms_db.query(sql, [name], (err, results) => {
+    if (err) {
+      console.error("Error checking payment exist:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ exists: results.length > 0 });
+  });
+});
+
+// Route to create a new payment record (as Draft)
+app.post("/create-payment", (req, res) => {
+  const { user_data, name, description } = req.body;
+  if (!user_data || !name || !description) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  // Insert a new payment record with status 'Draft'
+  const sql = `
+    INSERT INTO payment (user_id, name, description, status)
+    VALUES (?, ?, ?, 'Draft')
+  `;
+  oms_db.query(sql, [userObj.id, name, description], (err, result) => {
+    if (err) {
+      console.error("Error creating payment:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({
+      status: true,
+      id: result.insertId,
+      message: "Payment created successfully",
+    });
+  });
+});
+
+app.post("/fetch-payment-details", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Payment ID is required" });
+  }
+  const sql = "SELECT * FROM payment WHERE id = ?";
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching payment details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Payment not found" });
+    }
+    const data = results.map((draftBudget) => {
+      draftBudget.updated_at = formatDate(draftBudget.updated_at);
+      draftBudget.created_at = formatDate(draftBudget.created_at);
+      draftBudget.amount = "₱ " + draftBudget.amount;
+
+      if (draftBudget.approved_at !== null) {
+        draftBudget.approved_at = formatDate(draftBudget.approved_at);
+      }
+
+      if (draftBudget.published_at !== null) {
+        draftBudget.published_at = formatDate(draftBudget.published_at);
+      }
+
+      return draftBudget;
+    });
+
+    return res.json({ status: true, data: data[0] });
+  });
+});
+
+app.post("/update-payment", (req, res) => {
+  const {
+    user_data,
+    id,
+    name,
+    description,
+    amount,
+    due_date,
+    status,
+    request_message,
+  } = req.body;
+  if (status === "Sent for Approval") {
+    if (!id || !name || !description || !amount || !due_date) {
+      return res
+        .status(400)
+        .json({ status: false, error: "All fields are required" });
+    }
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  if (status === "Sent for Approval") {
+    // Create an approval record for the payment.
+    const approvalName = "Approval for Payment: " + name;
+    const approvalSql = `
+      INSERT INTO approval (name, type, relating_id, request_message, user_id)
+      VALUES (?, 'Payment', ?, ?, ?)
+    `;
+    oms_db.query(
+      approvalSql,
+      [approvalName, id, request_message, userObj.id],
+      (approvalErr, approvalResult) => {
+        if (approvalErr) {
+          console.error("Error creating payment approval record:", approvalErr);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        const approval_id = approvalResult.insertId;
+        // Now update the payment record including the approval_id.
+        const sql = `
+          UPDATE payment
+          SET name = ?, 
+              description = ?, 
+              amount = ?,
+              due_date = ?,
+              status = ?,
+              approval_id = ?
+          WHERE id = ?
+        `;
+        oms_db.query(
+          sql,
+          [name, description, amount, due_date, status, approval_id, id],
+          (err, result) => {
+            if (err) {
+              console.error("Error updating payment with approval:", err);
+              return res
+                .status(500)
+                .json({ status: false, error: "Internal Server Error" });
+            }
+            if (result.affectedRows === 0) {
+              return res
+                .status(404)
+                .json({ status: false, error: "Payment not found" });
+            }
+            // Fetch the updated payment record.
+            const fetchSql = "SELECT * FROM payment WHERE id = ?";
+            oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+              if (fetchErr) {
+                console.error("Error fetching updated payment:", fetchErr);
+                return res
+                  .status(500)
+                  .json({ status: false, error: "Internal Server Error" });
+              }
+              return res.json({ status: true, data: fetchResults[0] });
+            });
+          }
+        );
+      }
+    );
+  } else {
+    // Normal update without creating an approval record.
+    const sql = `
+      UPDATE payment
+      SET name = ?, 
+          description = ?, 
+          amount = ?,
+          due_date = ?,
+          status = ?
+      WHERE id = ?
+    `;
+    oms_db.query(
+      sql,
+      [name, description, amount, due_date, status, id],
+      (err, result) => {
+        if (err) {
+          console.error("Error updating payment:", err);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res
+            .status(404)
+            .json({ status: false, error: "Payment not found" });
+        }
+        const fetchSql = "SELECT * FROM payment WHERE id = ?";
+        oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+          if (fetchErr) {
+            console.error("Error fetching updated payment:", fetchErr);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          return res.json({ status: true, data: fetchResults[0] });
+        });
+      }
+    );
+  }
+});
+
+app.post("/cancel-payment-approval", (req, res) => {
+  const { id, approval_id, user_data } = req.body;
+  if (!id || !approval_id || !user_data) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  const decision_message = `Cancelled by ${userObj.full_name} - (${userObj.student_id}) ${userObj.designation}`;
+
+  // First update the approval record
+  const updateApprovalSql = `
+    UPDATE approval 
+    SET decision_message = ?, decision = 'Cancelled' 
+    WHERE id = ?
+  `;
+  oms_db.query(
+    updateApprovalSql,
+    [decision_message, approval_id],
+    (err, approvalResult) => {
+      if (err) {
+        console.error("Error updating approval record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      // Then update the payment record: revert status to draft and clear approval_id.
+      const updatePaymentSql = `
+        UPDATE payment 
+        SET status = 'Back to Draft', 
+            approval_id = NULL 
+        WHERE id = ?
+      `;
+      oms_db.query(updatePaymentSql, [id], (err, paymentResult) => {
+        if (err) {
+          console.error("Error updating payment record:", err);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        return res.json({
+          status: true,
+          message: "Payment approval cancelled successfully",
+        });
+      });
+    }
+  );
+});
+
+app.post("/payment-approval-decision", (req, res) => {
+  const { approval_id, decision_message, decision, id } = req.body;
+  if (!approval_id || !decision_message || !decision || !id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  // First, update the approval record with the decision and decision_message
+  const updateApprovalSql = `
+    UPDATE approval 
+    SET decision_message = ?, decision = ?
+    WHERE id = ?
+  `;
+  oms_db.query(
+    updateApprovalSql,
+    [decision_message, decision, approval_id],
+    (err, result) => {
+      if (err) {
+        console.error("Error updating approval record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Approval record not found" });
+      }
+
+      // Determine the new status for the payment record based on the decision
+      let newStatus = "";
+      if (decision === "Approved") {
+        newStatus = "Ready to Issue";
+      } else if (decision === "Disapproved") {
+        newStatus = "Back to Draft";
+      } else {
+        return res
+          .status(400)
+          .json({ status: false, error: "Invalid decision value" });
+      }
+
+      // Set the approval_id update value: null if disapproved, otherwise leave unchanged (approval_id)
+      const approvalIdUpdate = decision === "Disapproved" ? null : approval_id;
+
+      // Update the corresponding payment record where id matches the provided id
+      const updatePaymentSql = `
+        UPDATE payment 
+        SET status = ?, approved_at = NOW(), approval_id = ?
+        WHERE id = ?
+      `;
+      oms_db.query(
+        updatePaymentSql,
+        [newStatus, approvalIdUpdate, id],
+        (err2, paymentResult) => {
+          if (err2) {
+            console.error("Error updating payment record:", err2);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          if (paymentResult.affectedRows === 0) {
+            return res
+              .status(404)
+              .json({ status: false, error: "Payment record not found" });
+          }
+          return res.json({
+            status: true,
+            message: "Decision submitted and payment updated successfully",
+          });
+        }
+      );
+    }
+  );
+});
+
+app.post("/issue-payment", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Payment ID is required" });
+  }
+
+  const sql = `
+    UPDATE payment 
+    SET issued_at = NOW(),
+        status = 'Issued'
+    WHERE id = ?
+  `;
+  oms_db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("Error issuing payment:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Payment not found" });
+    }
+    return res.json({ status: true, message: "Payment issued successfully" });
+  });
+});
+
+app.post("/delete-draft-payment", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Payment ID is required" });
+  }
+
+  // First, check if the draft payment exists
+  const selectSql =
+    "SELECT id FROM payment WHERE id = ? AND status IN ('Draft', 'Back to Draft')";
+  oms_db.query(selectSql, [id], (selectErr, selectResults) => {
+    if (selectErr) {
+      console.error("Error selecting draft payment:", selectErr);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (selectResults.length === 0) {
+      return res
+        .status(404)
+        .json({ status: false, error: "Draft payment not found" });
+    }
+
+    // Delete the draft payment record from the payment table
+    const deleteSql = "DELETE FROM payment WHERE id = ?";
+    oms_db.query(deleteSql, [id], (deleteErr, deleteResult) => {
+      if (deleteErr) {
+        console.error("Error deleting draft payment:", deleteErr);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (deleteResult.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Draft payment not found" });
+      }
+      return res.json({
+        status: true,
+        message: "Draft payment deleted successfully",
+      });
+    });
+  });
+});
+
+// Route to check if an event group with the given name already exists
+app.post("/check-event-group-exist", (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Event group name is required" });
+  }
+  const sql = "SELECT id FROM event_group WHERE name = ? LIMIT 1";
+  oms_db.query(sql, [name], (err, results) => {
+    if (err) {
+      console.error("Error checking event group exist:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ exists: results.length > 0 });
+  });
+});
+
+// Route to create a new event group
+app.post("/create-event-group", (req, res) => {
+  const { user_data, name, description } = req.body;
+  if (!user_data || !name || !description) {
+    return res.status(400).json({
+      status: false,
+      error: "Event group name, description, and user data are required",
+    });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  const sql =
+    "INSERT INTO event_group (name, user_id, description) VALUES (?, ?, ?)";
+  oms_db.query(sql, [name, userObj.id, description], (err, result) => {
+    if (err) {
+      console.error("Error creating event group:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    return res.json({ status: true, id: result.insertId });
+  });
+});
+
+app.post("/fetch-draft-events", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to events with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      start_date, 
+      end_date,
+      status
+    FROM event_group
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status IN ('Draft', 'Back to Draft')");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // Append conditions if they exist
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Back to Draft' THEN 0 
+        WHEN 'Draft' THEN 1 
+        ELSE 2 
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft events:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    const data = results.map((event) => {
+      if (event.created_at !== null) {
+        event.created_at = formatDateTableNoTime(event.created_at);
+      }
+
+      // Format start and end dates for the event using formatDateTableNoTime
+      const formattedStart = event.start_date
+        ? formatDateTableNoTime(event.start_date)
+        : null;
+      const formattedEnd = event.end_date
+        ? formatDateTableNoTime(event.end_date)
+        : null;
+
+      if (!formattedStart && !formattedEnd) {
+        event.date_range = "Not Yet Set";
+      } else if (formattedStart && formattedEnd) {
+        event.date_range =
+          formattedStart === formattedEnd
+            ? formattedStart
+            : formattedStart + " - " + formattedEnd;
+      } else {
+        event.date_range = formattedStart ? formattedStart : formattedEnd;
+      }
+
+      return event;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-pending-event-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: always restrict to events with status 'Draft' or 'Back to Draft'
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      start_date, 
+      end_date,
+      status
+    FROM event_group
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("status IN ('Sent for Approval', 'Ready to Publish')");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // Append conditions if they exist
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  sql += `
+    ORDER BY 
+      CASE status 
+        WHEN 'Ready to Publish' THEN 0 
+        WHEN 'Sent for Approval' THEN 1 
+        ELSE 2 
+      END,
+      updated_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching draft events:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    const data = results.map((event) => {
+      if (event.created_at !== null) {
+        event.created_at = formatDateTableNoTime(event.created_at);
+      }
+
+      // Format start and end dates for the event using formatDateTableNoTime
+      const formattedStart = event.start_date
+        ? formatDateTableNoTime(event.start_date)
+        : null;
+      const formattedEnd = event.end_date
+        ? formatDateTableNoTime(event.end_date)
+        : null;
+
+      if (!formattedStart && !formattedEnd) {
+        event.date_range = "Not Yet Set";
+      } else if (formattedStart && formattedEnd) {
+        event.date_range =
+          formattedStart === formattedEnd
+            ? formattedStart
+            : formattedStart + " - " + formattedEnd;
+      } else {
+        event.date_range = formattedStart ? formattedStart : formattedEnd;
+      }
+
+      return event;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
+app.post("/fetch-draft-event-details", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Event ID is required" });
+  }
+
+  const sql =
+    "SELECT *, approved_at as approved_at_orig FROM event_group WHERE id = ?";
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching event details:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ status: false, error: "Event not found" });
+    }
+
+    const data = results.map((draftEvent) => {
+      draftEvent.updated_at = formatDate(draftEvent.updated_at);
+      draftEvent.created_at = formatDate(draftEvent.created_at);
+
+      if (draftEvent.approved_at !== null) {
+        draftEvent.approved_at = formatDate(draftEvent.approved_at);
+      }
+
+      if (draftEvent.published_at !== null) {
+        draftEvent.published_at = formatDate(draftEvent.published_at);
+      }
+
+      return draftEvent;
+    });
+
+    return res.json({ status: true, data: data[0] });
+  });
+});
+
+app.post("/update-draft-event", (req, res) => {
+  const {
+    user_data,
+    id,
+    name,
+    description,
+    breakdown, // expected to be the attendance groups data
+    start_date,
+    end_date,
+    status,
+    request_message,
+  } = req.body;
+
+  if (
+    !id ||
+    !name ||
+    !description ||
+    !breakdown ||
+    !start_date ||
+    !end_date ||
+    !status
+  ) {
+    return res
+      .status(400)
+      .json({ status: false, error: "All fields are required" });
+  }
+
+  const userObj = JSON.parse(user_data);
+
+  if (status === "Sent for Approval") {
+    // First create an approval record for the event.
+    const approvalName = "Approval for " + name;
+    const approvalSql = `
+      INSERT INTO approval (name, type, relating_id, request_message, user_id)
+      VALUES (?, 'Event', ?, ?, ?)
+    `;
+    oms_db.query(
+      approvalSql,
+      [approvalName, id, request_message, userObj.id],
+      (approvalErr, approvalResult) => {
+        if (approvalErr) {
+          console.error("Error creating approval record:", approvalErr);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        const approval_id = approvalResult.insertId;
+        // Now update the event with the new approval_id.
+        const sql = `
+        UPDATE event_group 
+        SET name = ?, 
+            description = ?, 
+            breakdown = ?, 
+            start_date = ?,
+            end_date = ?,
+            status = ?, 
+            approval_id = ?
+        WHERE id = ?
+      `;
+        oms_db.query(
+          sql,
+          [
+            name,
+            description,
+            JSON.stringify(breakdown),
+            start_date,
+            end_date,
+            status,
+            approval_id,
+            id,
+          ],
+          (err, result) => {
+            if (err) {
+              console.error("Error updating event with approval:", err);
+              return res
+                .status(500)
+                .json({ status: false, error: "Internal Server Error" });
+            }
+            if (result.affectedRows === 0) {
+              return res
+                .status(404)
+                .json({ status: false, error: "Event not found" });
+            }
+            // Fetch the updated event record.
+            const fetchSql = "SELECT * FROM event_group WHERE id = ?";
+            oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+              if (fetchErr) {
+                console.error("Error fetching updated event:", fetchErr);
+                return res
+                  .status(500)
+                  .json({ status: false, error: "Internal Server Error" });
+              }
+              const data = fetchResults.map((event) => {
+                event.updated_at = formatDate(event.updated_at);
+                event.created_at = formatDate(event.created_at);
+                return event;
+              });
+              return res.json({ status: true, data: data[0] });
+            });
+          }
+        );
+      }
+    );
+  } else {
+    // Normal update without creating an approval record.
+    const sql = `
+      UPDATE event_group 
+      SET name = ?, 
+          description = ?, 
+          breakdown = ?, 
+          start_date = ?,
+          end_date = ?,
+          status = ?
+      WHERE id = ?
+    `;
+    oms_db.query(
+      sql,
+      [
+        name,
+        description,
+        JSON.stringify(breakdown),
+        start_date,
+        end_date,
+        status,
+        id,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Error updating event:", err);
+          return res
+            .status(500)
+            .json({ status: false, error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res
+            .status(404)
+            .json({ status: false, error: "Event not found" });
+        }
+        const fetchSql = "SELECT * FROM event_group WHERE id = ?";
+        oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+          if (fetchErr) {
+            console.error("Error fetching updated event:", fetchErr);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          const data = fetchResults.map((event) => {
+            event.updated_at = formatDate(event.updated_at);
+            event.created_at = formatDate(event.created_at);
+            return event;
+          });
+          return res.json({ status: true, data: data[0] });
+        });
+      }
+    );
+  }
+});
+
+app.post("/fetch-your-total-unpaid-payment", (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+
+  const sql = `
+    SELECT IFNULL(SUM(amount), 0) AS totalUnpaid 
+    FROM payment 
+    WHERE status = 'Issued'
+  `;
+
+  oms_db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Error fetching total unpaid payment:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+    const total = parseFloat(results[0].totalUnpaid) || 0;
+    const formatted = "₱ " + total;
+    return res.json({
+      status: true,
+      data: { your_total_unpaid_payment: formatted },
+    });
+  });
+});
+
+app.post("/fetch-servicing", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  let sql = `
+    SELECT 
+      student_user_id, 
+      points, 
+      created_at
+    FROM servicing
+  `;
+  let conditions = [];
+  let params = [];
+
+  // Apply various filtering modes.
+  if (mode === "Search") {
+    conditions.push("(CAST(points AS CHAR) LIKE ? OR user_id LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(CAST(points AS CHAR) LIKE ? OR user_id LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern, pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+  sql += " ORDER BY created_at DESC";
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching servicing records:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+    // Format the created_at field (using your helper function)
+    const data = results.map((record) => {
+      record.created_at = formatDateTableNoTime(record.created_at);
+      return record;
+    });
+    return res.json({ status: true, data });
+  });
+});
+
+app.post("/fetch-user-options", (req, res) => {
+  const sql = "SELECT id, full_name FROM user_account ORDER BY full_name";
+
+  oms_db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching user options:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    return res.json({ status: true, data: results });
+  });
+});
+
+app.post("/create-servicing", (req, res) => {
+  const { user_data, student_user_id, points, reason } = req.body;
+  if (!user_data || !student_user_id || !points || !reason) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
+
+  // Insert into servicing table
+  const insertSql = `
+    INSERT INTO servicing (user_id, student_user_id, points, reason)
+    VALUES (?, ?, ?, ?)
+  `;
+  oms_db.query(
+    insertSql,
+    [userObj.id, student_user_id, points, reason],
+    (err, result) => {
+      if (err) {
+        console.error("Error inserting servicing record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+
+      // Update the servicing_points of the user_account where id equals student_user_id
+      const updateSql = `
+      UPDATE user_account 
+      SET servicing_points = IFNULL(servicing_points, 0) + ?
+      WHERE id = ?
+    `;
+      oms_db.query(
+        updateSql,
+        [points, student_user_id],
+        (updateErr, updateResult) => {
+          if (updateErr) {
+            console.error("Error updating servicing points:", updateErr);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+
+          return res.json({
+            status: true,
+            message: "Servicing record created and points updated",
+          });
+        }
+      );
+    }
+  );
 });
 
 app.use("/proofs", express.static(path.join(__dirname, "proofs")));

@@ -10,7 +10,7 @@ import backIcon from "../../assets/prev.svg";
 import Modal from "../../components/ui/modal";
 import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
 
-export default function EditDraftBudgetModal({
+export default function EditDraftEventModal({
   isOpen,
   onClose,
   onGoBack,
@@ -24,24 +24,20 @@ export default function EditDraftBudgetModal({
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [budgetGroups, setBudgetGroups] = useState([
-    {
-      groupName: "",
-      rows: [{ itemName: "", quantity: "", estimatedCost: "" }],
-    },
-  ]);
-  const [payments, setPayments] = useState([
-    { paymentName: "", amount: "", description: "", dueDate: "" },
-  ]);
+
+  const [eventName, setEventName] = useState("");
+  const [eventDescription, setEventDescription] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [attendanceGroups, setAttendanceGroups] = useState([]);
+  const today = new Date().toISOString().slice(0, 10);
+
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const keyLockRef = useRef(false);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
-  const [editedBudgetName, setEditedBudgetName] = useState("");
-  const [editedDescription, setEditedDescription] = useState("");
-  const [showDelete, setShowDelete] = useState(false);
-  const [includePayments, setIncludePayments] = useState(false);
-  const [showOtherOfficers, setShowOtherOfficers] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [showDelete, setShowDelete] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
   const [requestError, setRequestError] = useState("");
@@ -54,24 +50,16 @@ export default function EditDraftBudgetModal({
   const errorRef = useRef(null);
 
   const ip = useContext(IpContext);
-  const title = "EDIT DRAFT BUDGET";
+  const title = "EDIT DRAFT EVENT";
+
+  const formatDateForInput = (date) =>
+    new Date(date).toISOString().slice(0, 10);
 
   useEffect(() => {
     if (!isOpen) {
       setDetails(null);
-      setBudgetGroups([
-        {
-          groupName: "",
-          rows: [{ itemName: "", quantity: "", estimatedCost: "" }],
-        },
-      ]);
-      setPayments([
-        { paymentName: "", amount: "", description: "", dueDate: "" },
-      ]);
-      setEditedBudgetName("");
-      setEditedDescription("");
-      setIncludePayments(false);
-      setShowOtherOfficers(false);
+      setEventName("");
+      setEventDescription("");
       setErrorMsg("");
       setShowRequestModal(false);
       setRequestMessage("");
@@ -100,39 +88,60 @@ export default function EditDraftBudgetModal({
   }, [isOpen]);
 
   useEffect(() => {
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (start > end) {
+        setErrorMsg("Start date must be before End date.");
+        setAttendanceGroups([]);
+        return;
+      }
+      let groups = [];
+      let current = new Date(start);
+      while (current <= end) {
+        groups.push({
+          date: current.toISOString().slice(0, 10),
+          rows: [{ time: "", period: "", process: "In", cutoff: "" }],
+        });
+        current.setDate(current.getDate() + 1);
+      }
+      setAttendanceGroups(groups);
+    }
+  }, [startDate, endDate]);
+
+  useEffect(() => {
     setLoading(true);
     async function fetchDetails() {
       if (!id) return;
       try {
-        const response = await fetch(`${ip}/fetch-draft-budget-details`, {
+        const response = await fetch(`${ip}/fetch-draft-event-details`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
         if (!response.ok) throw new Error("Failed to fetch details");
         const result = await response.json();
-        console.log("Fetched budget details:", result);
+        console.log("Fetched event details:", result);
         if (result.status) {
           const data = result.data;
           setDetails(data);
-          setEditedBudgetName(data.name || "");
-          setEditedDescription(data.description || "");
-          setBudgetGroups(JSON.parse(data.breakdown));
-          setPayments(JSON.parse(data.payments));
-          if (data.include_payment.data[0] === 1) {
-            setIncludePayments(true);
-          } else {
-            setIncludePayments(false);
-          }
-
-          if (data.show_other_officers.data[0] === 1) {
-            setShowOtherOfficers(true);
-          } else {
-            setShowOtherOfficers(false);
+          setEventName(data.name || "");
+          setEventDescription(data.description || "");
+          setStartDate(
+            data.start_date ? formatDateForInput(data.start_date) : ""
+          );
+          setEndDate(data.end_date ? formatDateForInput(data.end_date) : "");
+          if (data.breakdown) {
+            try {
+              const parsedAttendance = JSON.parse(data.breakdown);
+              setAttendanceGroups(parsedAttendance);
+            } catch (err) {
+              console.error("Error parsing attendance data:", err);
+            }
           }
         }
       } catch (error) {
-        console.error("Error fetching budget details:", error);
+        console.error("Error fetching event details:", error);
       } finally {
         setLoading(false);
       }
@@ -144,7 +153,7 @@ export default function EditDraftBudgetModal({
         const response = await fetch(`${ip}/fetch-approval-history`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "Budget", relating_id: id }),
+          body: JSON.stringify({ type: "Event", relating_id: id }),
         });
         if (!response.ok) {
           throw new Error("Failed to fetch approval history");
@@ -185,31 +194,40 @@ export default function EditDraftBudgetModal({
     }
   };
 
-  const updateBudgetGroupName = (groupIndex, value) => {
-    setBudgetGroups((prev) => {
+  // ----- Helper to determine period based on time input -----
+  const getPeriodFromTime = (timeValue) => {
+    if (!timeValue) return "";
+    const [hour, minute] = timeValue.split(":").map(Number);
+    const total = hour * 60 + minute;
+    if (total >= 0 && total < 360) return "Dawn"; // 12am - 6am
+    if (total >= 360 && total < 720) return "Morning"; // 6am - 12pm
+    if (total >= 720 && total < 1080) return "Afternoon"; // 12pm - 6pm
+    if (total >= 1080 && total <= 1440) return "Evening"; // 6pm - 12am
+    return "";
+  };
+
+  // ----- Update a field in an attendance group row -----
+  const updateAttendanceGroupRow = (groupIdx, rowIdx, field, value) => {
+    setAttendanceGroups((prev) => {
       const updated = [...prev];
-      updated[groupIndex].groupName = value;
+      updated[groupIdx].rows[rowIdx][field] = value;
+      if (field === "time") {
+        updated[groupIdx].rows[rowIdx].period = getPeriodFromTime(value);
+      }
       return updated;
     });
   };
 
-  const updateBudgetGroupRow = (groupIndex, rowIndex, field, value) => {
-    setBudgetGroups((prev) => {
-      const updated = [...prev];
-      updated[groupIndex].rows[rowIndex][field] = value;
-      return updated;
-    });
-  };
-
-  const addRowToBudgetGroup = (groupIndex) => {
-    setBudgetGroups((prev) =>
+  // ----- Add a new row to an attendance group -----
+  const addRowToAttendanceGroup = (groupIdx) => {
+    setAttendanceGroups((prev) =>
       prev.map((group, idx) =>
-        idx === groupIndex
+        idx === groupIdx
           ? {
               ...group,
               rows: [
                 ...group.rows,
-                { itemName: "", quantity: "", estimatedCost: "" },
+                { time: "", period: "", process: "In", cutoff: "" },
               ],
             }
           : group
@@ -217,206 +235,111 @@ export default function EditDraftBudgetModal({
     );
   };
 
-  const removeRowFromBudgetGroup = (groupIndex, rowIndex) => {
-    setBudgetGroups((prev) =>
+  // ----- Remove a row from an attendance group -----
+  const removeRowFromAttendanceGroup = (groupIdx, rowIdx) => {
+    setAttendanceGroups((prev) =>
       prev.map((group, idx) => {
-        if (idx !== groupIndex) return group;
+        if (idx !== groupIdx) return group;
         if (group.rows.length > 1) {
-          return {
-            ...group,
-            rows: group.rows.filter((_, i) => i !== rowIndex),
-          };
+          return { ...group, rows: group.rows.filter((_, i) => i !== rowIdx) };
         }
         return group;
       })
     );
   };
 
-  const addBudgetGroup = () => {
-    setBudgetGroups((prev) => [
-      ...prev,
-      {
-        groupName: "",
-        rows: [{ itemName: "", quantity: "", estimatedCost: "" }],
-      },
-    ]);
-  };
-
-  const removeBudgetGroup = (groupIndex) => {
-    setBudgetGroups((prev) => {
-      if (prev.length > 1) return prev.filter((_, idx) => idx !== groupIndex);
-      return prev;
-    });
-  };
-
-  const calculateBudgetGroupTotal = (group) =>
-    group.rows
-      .reduce((acc, row) => acc + (parseFloat(row.estimatedCost) || 0), 0)
-      .toFixed(2);
-
-  const calculateOverallBudgetTotal = () =>
-    budgetGroups
-      .reduce(
-        (acc, group) => acc + parseFloat(calculateBudgetGroupTotal(group)),
-        0
-      )
-      .toFixed(2);
-
-  const updatePaymentRow = (index, field, value) => {
-    setPayments((prev) => {
-      const updated = [...prev];
-      updated[index][field] = value;
-      return updated;
-    });
-  };
-
-  const addPaymentRow = () => {
-    setPayments((prev) => [
-      ...prev,
-      { name: "", amount: "", description: "", dueDate: "" },
-    ]);
-  };
-
-  const removePaymentRow = (index) => {
-    setPayments((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const getMinDueDateString = () => {
-    const minDueDate = new Date();
-    minDueDate.setDate(minDueDate.getDate() + 1); // only days ahead of today
-    return minDueDate.toISOString().slice(0, 16);
-  };
-
-  // Payment total helper
-  const calculateTotalPayments = () =>
-    payments
-      .reduce((acc, payment) => acc + (parseFloat(payment.amount) || 0), 0)
-      .toFixed(2);
-
   const validateForApproval = () => {
-    // Validate each budget group.
-    const budgetGroupInvalid = budgetGroups.some((group) => {
-      if (!group.groupName.trim()) return true;
-      return group.rows.some(
-        (row) =>
-          !row.itemName.trim() ||
-          !String(row.quantity).trim() ||
-          !String(row.estimatedCost).trim()
-      );
-    });
-    if (budgetGroupInvalid) {
-      const msg = "Please fill in all required fields in budget groups.";
+    const attendanceGroupInvalid = attendanceGroups.some((group) =>
+      group.rows.some(
+        (row) => !row.time.trim() || !row.cutoff.trim() || !row.process.trim()
+      )
+    );
+    if (attendanceGroupInvalid) {
+      const msg = "Please fill in all required fields in attendance groups.";
       setErrorMsg(msg);
       return false;
-    }
-
-    // Validate payments only if payments are included.
-    if (includePayments) {
-      const paymentInvalid = payments.some((payment) => {
-        // Check for empty required fields.
-        if (
-          !payment.paymentName.trim() ||
-          !String(payment.amount).trim() ||
-          !payment.description.trim() ||
-          !payment.dueDate.trim()
-        ) {
-          return true;
-        }
-        // Ensure dueDate is in the future.
-        const selectedDueDate = new Date(payment.dueDate);
-        const now = new Date();
-        if (selectedDueDate <= now) {
-          return true;
-        }
-        return false;
-      });
-      if (paymentInvalid) {
-        const msg =
-          "Please fill in all required payment fields and ensure the due date is in the future.";
-        setErrorMsg(msg);
-        return false;
-      }
     }
     return true;
   };
 
-  const updateBudget = async (statusParam = "Draft") => {
+  const updateEvent = async (statusParam = "Draft") => {
     // Clear previous error message.
     setErrorMsg("");
+    setErrorMsg("");
+
+    const todayDateObj = new Date(new Date().toISOString().split("T")[0]);
+    const todayDateStr = todayDateObj.toISOString().slice(0, 10);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (start < todayDateObj || end < todayDateObj) {
+      setErrorMsg("Start date and End date must be today or in the future.");
+      // Reset both dates to today's date.
+      setStartDate(todayDateStr);
+      setEndDate(todayDateStr);
+      return;
+    }
+
+    if (end < start) {
+      setErrorMsg("End date cannot be before start date.");
+      // Reset both dates to today's date.
+      setStartDate(todayDateStr);
+      setEndDate(todayDateStr);
+      return;
+    }
+
+    // Calculate inclusive difference in days.
+    const diffTime = end - start;
+    const diffDays = diffTime / (1000 * 60 * 60 * 24) + 1; // +1 for inclusive count
+    if (diffDays > 5) {
+      setErrorMsg("Event range maximum is five days.");
+      // Reset endDate to startDate + 4 days (making a five-day range inclusive)
+      let newEndDate = new Date(start);
+      newEndDate.setDate(newEndDate.getDate() + 4);
+      setEndDate(newEndDate.toISOString().slice(0, 10));
+      return;
+    }
+
     // Only perform validation when submitting for approval.
     if (statusParam === "Sent for Approval") {
-      // Validate each budget group.
-      const budgetGroupInvalid = budgetGroups.some((group) => {
-        if (!group.groupName.trim()) return true;
-        return group.rows.some(
-          (row) =>
-            !row.itemName.trim() ||
-            !String(row.quantity).trim() ||
-            !String(row.estimatedCost).trim()
-        );
-      });
-      if (budgetGroupInvalid) {
-        const msg = "Please fill in all required fields in budget groups.";
+      // Validate each attendance group.
+      // (Adjust validation logic as needed; here we simply check that each row has a time and cutoff.)
+      const attendanceGroupInvalid = attendanceGroups.some((group) =>
+        group.rows.some(
+          (row) => !row.time.trim() || !row.cutoff.trim() || !row.process.trim()
+        )
+      );
+      if (attendanceGroupInvalid) {
+        const msg = "Please fill in all required fields in attendance groups.";
         setErrorMsg(msg);
         return;
       }
-      // Validate payments only if payments are included.
-      if (includePayments) {
-        const paymentInvalid = payments.some((payment) => {
-          // Check for empty required fields.
-          if (
-            !payment.paymentName.trim() ||
-            !String(payment.amount).trim() ||
-            !payment.description.trim() ||
-            !payment.dueDate.trim()
-          ) {
-            return true;
-          }
-          // Ensure dueDate is in the future.
-          const selectedDueDate = new Date(payment.dueDate);
-          const now = new Date();
-          if (selectedDueDate <= now) {
-            return true;
-          }
-          return false;
-        });
-        if (paymentInvalid) {
-          const msg =
-            "Please fill in all required payment fields and ensure the due date is in the future.";
-          setErrorMsg(msg);
-          return false;
-        }
-      }
     }
     try {
-      const response = await fetch(`${ip}/update-draft-budget`, {
+      const response = await fetch(`${ip}/update-draft-event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_data: userData,
           id,
-          name: editedBudgetName,
-          description: editedDescription,
-          amount: calculateOverallBudgetTotal(),
-          breakdown: budgetGroups,
-          payments: includePayments
-            ? payments
-            : [{ paymentName: "", amount: "", description: "", dueDate: "" }],
-          include_payment: includePayments,
-          show_other_officers: showOtherOfficers,
+          name: eventName,
+          description: eventDescription,
+          start_date: startDate,
+          end_date: endDate,
+          breakdown: attendanceGroups, // now using attendance groups instead of budget groups
           status: statusParam,
           request_message:
             statusParam === "Sent for Approval" ? requestMessage : "",
         }),
       });
       if (!response.ok) {
-        throw new Error("Failed to update budget");
+        throw new Error("Failed to update event");
       }
       const result = await response.json();
-      console.log("Updated budget:", result);
+      console.log("Updated event:", result);
       if (result.status) {
         if (statusParam === "Draft") {
-          // Only update details if name or description has changed
+          // If details have changed, update the details state.
           if (
             result.data.name !== details?.name ||
             result.data.description !== details?.description ||
@@ -424,44 +347,30 @@ export default function EditDraftBudgetModal({
           ) {
             setDetails(result.data);
           }
-          setPayments(JSON.parse(result.data.payments));
           setIsEditingDetails(false);
-          handleShowNotification("Budget updated successfully", "success");
+          handleShowNotification("Event updated successfully", "success");
           if (refreshData) refreshData();
         } else if (statusParam === "Sent for Approval") {
-          // Do not update details; just notify and close the modal.
-          handleShowNotification("Budget is sent for approval", "success");
+          // Notify and close the modal when submission is sent for approval.
+          handleShowNotification("Event is sent for approval", "success");
           if (refreshData) refreshData();
           onRefreshGlobalData();
           onClose();
         }
       } else {
-        const msg = "Failed to update budget";
+        const msg = "Failed to update event";
         setErrorMsg(msg);
         handleShowNotification(msg, "error");
       }
     } catch (error) {
-      console.error("Error updating budget:", error);
-      const msg = "Error updating budget";
+      console.error("Error updating event:", error);
+      const msg = "Error updating event";
       setErrorMsg(msg);
       handleShowNotification(msg, "error");
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (isOpen && details) {
-      if (
-        details.include_payment.data[0] !== (includePayments ? 1 : 0) ||
-        details.show_other_officers.data[0] !== (showOtherOfficers ? 1 : 0)
-      ) {
-        updateBudget("Draft");
-        console.log("Updating checkbox....");
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [details, includePayments, isOpen, showOtherOfficers]);
 
   if (!isOpen && !isVisible) return null;
   return (
@@ -522,11 +431,11 @@ export default function EditDraftBudgetModal({
                     className="text-sm flex flex-col p-1 gap-4"
                   >
                     <div>
-                      <label className="block font-semibold">Budget Name</label>
+                      <label className="block font-semibold">Event Name</label>
                       <Input
-                        value={editedBudgetName}
-                        onChange={(e) => setEditedBudgetName(e.target.value)}
-                        placeholder="Enter Budget Name"
+                        value={eventName}
+                        onChange={(e) => setEventName(e.target.value)}
+                        placeholder="Enter Event Name"
                         className="w-full border rounded-md p-1.5 text-sm"
                       />
                     </div>
@@ -534,8 +443,8 @@ export default function EditDraftBudgetModal({
                       <label className="flex font-semibold">Description</label>
                       <textarea
                         type="text"
-                        value={editedDescription}
-                        onChange={(e) => setEditedDescription(e.target.value)}
+                        value={eventDescription}
+                        onChange={(e) => setEventDescription(e.target.value)}
                         placeholder="Enter Description"
                         className="rounded-md border border-black h-40 p-1.5 w-full resize-none"
                       />
@@ -545,11 +454,11 @@ export default function EditDraftBudgetModal({
                         type="button"
                         onClick={() => {
                           // Update details and exit edit mode
-                          updateBudget("Draft");
+                          updateEvent("Draft");
                           setDetails((prev) => ({
                             ...prev,
-                            name: editedBudgetName,
-                            description: editedDescription,
+                            name: eventName,
+                            description: eventDescription,
                           }));
                           setIsEditingDetails(false);
                         }}
@@ -561,8 +470,8 @@ export default function EditDraftBudgetModal({
                         type="button"
                         onClick={() => {
                           // Reset edited values and exit edit mode
-                          setEditedBudgetName(details?.name || "");
-                          setEditedDescription(details?.description || "");
+                          setEventName(details?.name || "");
+                          setEventDescription(details?.description || "");
                           setIsEditingDetails(false);
                         }}
                         className="transition-all duration-150 transform hover:scale-105 hover:bg-gray-800 bg-gray-400 text-white px-3 py-1 rounded text-sm cursor-pointer"
@@ -582,7 +491,7 @@ export default function EditDraftBudgetModal({
                     <div className="text-sm flex flex-col gap-2">
                       <div className="py-3 px-4 border-b rounded-t-xl bg-sky-400">
                         <label className="block font-semibold">
-                          Budget Name
+                          Event Name
                         </label>
                         <div className="text-2xl">{details.name}</div>
                       </div>
@@ -609,12 +518,34 @@ export default function EditDraftBudgetModal({
                       {/* Additional details remain unchanged */}
                       <div className="flex flex-col gap-6 px-4 pb-4 pt-1 border-b">
                         <div>
-                          <label className="flex font-semibold">
-                            Tentative Budget Amount
+                          <label className="block font-semibold mb-1">
+                            Start Date
                           </label>
-                          <div className="text-2xl">
-                            ₱ {calculateOverallBudgetTotal()}
-                          </div>
+                          <Input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => {
+                              setStartDate(e.target.value);
+                              updateEvent("Draft");
+                            }}
+                            min={today} // Only today or future dates allowed
+                            className="w-full border rounded p-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">
+                            End Date
+                          </label>
+                          <Input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => {
+                              setEndDate(e.target.value);
+                              updateEvent("Draft");
+                            }}
+                            min={today} // Only today or future dates allowed
+                            className="w-full border rounded p-2"
+                          />
                         </div>
                         <div>
                           <label className="flex font-semibold">
@@ -627,35 +558,6 @@ export default function EditDraftBudgetModal({
                             Date Updated
                           </label>
                           <div>{details.updated_at}</div>
-                        </div>
-                        {/* Action buttons to edit details or delete budget */}
-                        <div>
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={includePayments}
-                              onChange={(e) =>
-                                setIncludePayments(e.target.checked)
-                              }
-                              className="form-checkbox"
-                            />
-                            <span className="text-sm font-semibold">
-                              Include Payments
-                            </span>
-                          </label>
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={showOtherOfficers}
-                              onChange={(e) =>
-                                setShowOtherOfficers(e.target.checked)
-                              }
-                              className="form-checkbox"
-                            />
-                            <span className="text-sm font-semibold">
-                              Show Budget to Other Officers
-                            </span>
-                          </label>
                         </div>
                       </div>
                     </div>
@@ -811,8 +713,8 @@ export default function EditDraftBudgetModal({
                           Budget Name
                         </label>
                         <Input
-                          value={editedBudgetName}
-                          onChange={(e) => setEditedBudgetName(e.target.value)}
+                          value={eventName}
+                          onChange={(e) => setEventName(e.target.value)}
                           placeholder="Enter Budget Name"
                           className="w-full border rounded-md p-1.5 text-sm"
                         />
@@ -823,10 +725,40 @@ export default function EditDraftBudgetModal({
                         </label>
                         <textarea
                           type="text"
-                          value={editedDescription}
-                          onChange={(e) => setEditedDescription(e.target.value)}
+                          value={eventDescription}
+                          onChange={(e) => setEventDescription(e.target.value)}
                           placeholder="Enter Description"
                           className="rounded-md border border-black h-40 p-1.5 w-full resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-1">
+                          Start Date
+                        </label>
+                        <Input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => {
+                            setStartDate(e.target.value);
+                            updateEvent("Draft");
+                          }}
+                          min={today} // Only today or future dates allowed
+                          className="w-full border rounded p-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-1">
+                          End Date
+                        </label>
+                        <Input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => {
+                            setEndDate(e.target.value);
+                            updateEvent("Draft");
+                          }}
+                          min={today} // Only today or future dates allowed
+                          className="w-full border rounded p-2"
                         />
                       </div>
                       <div>
@@ -839,36 +771,7 @@ export default function EditDraftBudgetModal({
                         <label className="flex font-semibold">
                           Date Updated
                         </label>
-                        <div>{details.updated_at || "cdsfvjihubi"}</div>
-                      </div>
-                      {/* Action buttons to edit details or delete budget */}
-                      <div>
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={includePayments}
-                            onChange={(e) =>
-                              setIncludePayments(e.target.checked)
-                            }
-                            className="form-checkbox"
-                          />
-                          <span className="text-sm font-semibold">
-                            Include Payments
-                          </span>
-                        </label>
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={showOtherOfficers}
-                            onChange={(e) =>
-                              setShowOtherOfficers(e.target.checked)
-                            }
-                            className="form-checkbox"
-                          />
-                          <span className="text-sm font-semibold">
-                            Show Budget to Other Officers
-                          </span>
-                        </label>
+                        <div>{details.updated_at}</div>
                       </div>
                       <div className="mt-2">
                         <label className="flex font-semibold">
@@ -934,181 +837,115 @@ export default function EditDraftBudgetModal({
                 )}
                 <div className="border-b border-gray-500 pb-6">
                   <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                    Budget Groups
+                    Attendance Groups
                   </h2>
-                  {budgetGroups.map((group, gIdx) => (
+                  {attendanceGroups.map((group, gIdx) => (
                     <div
                       key={gIdx}
                       className="mb-6 p-4 border rounded-lg bg-gray-50"
                     >
                       <div className="mb-3">
                         <label className="block text-sm font-semibold">
-                          Budget Group {gIdx + 1}
+                          Attendance Group - {group.date}
                         </label>
-                        <div className="flex flex-row space-x-2">
-                          <Input
-                            type="text"
-                            value={group.groupName}
-                            onChange={(e) =>
-                              updateBudgetGroupName(gIdx, e.target.value)
-                            }
-                            onBlur={() => updateBudget("Draft")}
-                            placeholder="Enter Budget Group Name"
-                            className={`transition-all duration-150 rounded-md border border-black bg-white ${
-                              budgetGroups.length > 1
-                                ? "w-6/7 sm:w-5/7"
-                                : "w-full"
-                            } p-1.5 text-sm`}
-                          />
-                          {budgetGroups.length > 1 && (
-                            <Button
-                              type="button"
-                              onClick={() => {
-                                removeBudgetGroup(gIdx);
-                                updateBudget("Draft");
-                              }}
-                              className="w-1/7 sm:w-2/7 bg-red-500 text-white p-1.5 rounded text-sm transition-all duration-150 transform hover:scale-105 cursor-pointer items-center justify-items-center"
-                            >
-                              {isMobile ? (
-                                <img
-                                  src={icons["src/assets/delete.svg"]}
-                                  alt="Remove row"
-                                  className="w-4 h-4 object-cover rounded cursor-pointer"
-                                />
-                              ) : (
-                                <p>Remove Group</p>
-                              )}
-                            </Button>
-                          )}
-                        </div>
                       </div>
-                      {/* Items Table for the Group */}
+                      {/* Items Table for the Attendance Group */}
                       <div className="border rounded-lg overflow-clip">
                         <div className="overflow-x-auto">
                           <table className="min-w-[450px] border-collapse">
-                            <thead>
-                              <tr className="bg-sky-400 text-sm text-white">
-                                <th className="p-2 text-left w-3/7 rounded-tl-lg">
-                                  Item Name
-                                </th>
-                                <th className="p-1 px-2 text-left w-1/7">
-                                  Quantity
-                                </th>
-                                <th className="p-1 px-2 text-left w-2/7">
-                                  Estimated Cost
-                                </th>
-                                <th className="p-1 px-2 text-left w-1/7 rounded-tr-lg">
-                                  Action
-                                </th>
+                            <thead className="bg-sky-400 text-sm text-white">
+                              <tr>
+                                <th className="p-2 text-left w-2/7">Date</th>
+                                <th className="p-2 text-left w-1/7">Time</th>
+                                <th className="p-2 text-left w-1/7">Period</th>
+                                <th className="p-2 text-left w-1/7">Process</th>
+                                <th className="p-2 text-left w-1/7">Cutoff</th>
+                                <th className="p-2 text-left w-1/7">Action</th>
                               </tr>
                             </thead>
                             <tbody>
                               {group.rows.map((row, rIdx) => (
-                                <tr key={rIdx} className="text-sm bg-white">
-                                  <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
+                                <tr
+                                  key={rIdx}
+                                  className="text-sm bg-white border-b"
+                                >
+                                  <td className="p-2 whitespace-nowrap">
+                                    {/* Date is non-editable */}
+                                    <Input type="hidden" value={group.date} />
+                                    <span>{group.date}</span>
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap">
                                     <Input
-                                      id={`item-${gIdx}-${rIdx}`}
+                                      type="time"
+                                      value={row.time}
+                                      onChange={(e) => {
+                                        updateAttendanceGroupRow(
+                                          gIdx,
+                                          rIdx,
+                                          "time",
+                                          e.target.value
+                                        );
+                                        updateEvent("Draft");
+                                      }}
+                                      className="w-full"
+                                    />
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap">
+                                    <Input
                                       type="text"
-                                      value={row.itemName}
-                                      onChange={(e) =>
-                                        updateBudgetGroupRow(
-                                          gIdx,
-                                          rIdx,
-                                          "itemName",
-                                          e.target.value
-                                        )
-                                      }
-                                      placeholder="Item Name"
-                                      className="w-full"
-                                      onBlur={() => updateBudget("Draft")}
-                                      onKeyDown={(e) =>
-                                        handleKeyDown(e, () => {
-                                          // Focus on Quantity: you might need to use refs for better control.
-                                          document
-                                            .getElementById(
-                                              `qty-${gIdx}-${rIdx}`
-                                            )
-                                            ?.focus();
-                                        })
-                                      }
+                                      value={row.period}
+                                      readOnly
+                                      className="w-full bg-gray-100"
                                     />
                                   </td>
-                                  <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
+                                  <td className="p-2 whitespace-nowrap">
+                                    <select
+                                      value={row.process}
+                                      onChange={(e) => {
+                                        updateAttendanceGroupRow(
+                                          gIdx,
+                                          rIdx,
+                                          "process",
+                                          e.target.value
+                                        );
+                                        updateEvent("Draft");
+                                      }}
+                                      className="w-full border rounded p-1 text-sm"
+                                    >
+                                      <option value="In">In</option>
+                                      <option value="Out">Out</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap">
                                     <Input
-                                      id={`qty-${gIdx}-${rIdx}`}
-                                      type="number"
-                                      value={row.quantity}
-                                      onChange={(e) =>
-                                        updateBudgetGroupRow(
+                                      type="time"
+                                      value={row.cutoff}
+                                      onChange={(e) => {
+                                        updateAttendanceGroupRow(
                                           gIdx,
                                           rIdx,
-                                          "quantity",
+                                          "cutoff",
                                           e.target.value
-                                        )
-                                      }
-                                      placeholder="Quantity"
+                                        );
+                                        updateEvent("Draft");
+                                      }}
                                       className="w-full"
-                                      onBlur={() => updateBudget("Draft")}
-                                      onKeyDown={(e) =>
-                                        handleKeyDown(e, () => {
-                                          // Focus on Quantity: you might need to use refs for better control.
-                                          document
-                                            .getElementById(
-                                              `cost-${gIdx}-${rIdx}`
-                                            )
-                                            ?.focus();
-                                        })
-                                      }
                                     />
                                   </td>
-                                  <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
-                                    <Input
-                                      id={`cost-${gIdx}-${rIdx}`}
-                                      type="number"
-                                      value={row.estimatedCost}
-                                      onChange={(e) =>
-                                        updateBudgetGroupRow(
-                                          gIdx,
-                                          rIdx,
-                                          "estimatedCost",
-                                          e.target.value
-                                        )
-                                      }
-                                      placeholder="Estimated Cost"
-                                      step="0.01"
-                                      className="w-full"
-                                      onBlur={() => updateBudget("Draft")}
-                                      onKeyDown={(e) =>
-                                        handleKeyDown(e, () => {
-                                          // Focus on Quantity: you might need to use refs for better control.
-                                          document
-                                            .getElementById(
-                                              `item-${gIdx}-${rIdx}`
-                                            )
-                                            ?.focus();
-                                        })
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-1 text-center border-b">
+                                  <td className="p-2 text-center whitespace-nowrap">
                                     {group.rows.length > 1 && (
                                       <Button
                                         type="button"
                                         onClick={() => {
-                                          removeRowFromBudgetGroup(gIdx, rIdx);
-                                          updateBudget("Draft");
+                                          removeRowFromAttendanceGroup(
+                                            gIdx,
+                                            rIdx
+                                          );
+                                          updateEvent("Draft");
                                         }}
-                                        className="transition-all duration-150 transform hover:scale-105 cursor-pointer bg-red-500 text-white px-2 py-1 rounded text-xs"
+                                        className="bg-red-500 text-white px-2 py-1 rounded text-xs"
                                       >
-                                        {isMobile ? (
-                                          <img
-                                            src={icons["src/assets/delete.svg"]}
-                                            alt="Remove row"
-                                            className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
-                                          />
-                                        ) : (
-                                          <p>Remove</p>
-                                        )}
+                                        Remove
                                       </Button>
                                     )}
                                   </td>
@@ -1116,216 +953,29 @@ export default function EditDraftBudgetModal({
                               ))}
                             </tbody>
                             <tfoot>
-                              <tr className="font-semibold text-sm border-t">
-                                <td className="p-2" colSpan={2}>
-                                  Group Total
-                                </td>
-                                <td className="p-2" colSpan={2}>
-                                  ₱ {calculateBudgetGroupTotal(group)}
+                              <tr>
+                                <td
+                                  colSpan="6"
+                                  className="p-2 whitespace-nowrap"
+                                >
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      addRowToAttendanceGroup(gIdx);
+                                      updateEvent("Draft");
+                                    }}
+                                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+                                  >
+                                    Add Row
+                                  </Button>
                                 </td>
                               </tr>
                             </tfoot>
                           </table>
                         </div>
                       </div>
-                      <div className="mt-3">
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            addRowToBudgetGroup(gIdx);
-                            updateBudget("Draft");
-                          }}
-                          className="transition-all duration-150 transform hover:scale-105 bg-blue-600 text-white px-3 py-1 rounded text-sm cursor-pointer"
-                        >
-                          Add Row
-                        </Button>
-                      </div>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      addBudgetGroup();
-                      updateBudget("Draft");
-                    }}
-                    className="transition-all duration-150 transform hover:scale-105 text-white px-3 py-2 rounded text-sm cursor-pointer bg-green-600"
-                  >
-                    Add Budget Group
-                  </Button>
-                </div>
-                {/* Payments Section */}
-                {includePayments && (
-                  <div className="mt-5 border-b border-gray-500 pb-6">
-                    <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Payments
-                    </h2>
-                    <div className="overflow-clip border rounded-lg bg-white">
-                      <div className="overflow-x-auto">
-                        <table className="min-w-[450px] border-collapse">
-                          <thead>
-                            <tr className="bg-sky-400 text-sm text-white">
-                              <th className="p-2 text-left w-3/9 rounded-tl-lg">
-                                Payment Name
-                              </th>
-                              <th className="p-2 w-1/9 text-left">Amount</th>
-                              <th className="p-2 w-2/9 text-left">
-                                Description
-                              </th>
-                              <th className="p-2 w-2/9 text-left">Due Date</th>
-                              <th className="text-left p-2 w-1/9 rounded-tr-lg">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {payments.map((payment, idx) => (
-                              <tr key={idx} className="bg-white text-sm">
-                                <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
-                                  <Input
-                                    type="text"
-                                    value={payment.paymentName}
-                                    placeholder="Payment Name"
-                                    onChange={(e) =>
-                                      updatePaymentRow(
-                                        idx,
-                                        "paymentName",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full"
-                                  />
-                                </td>
-                                <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
-                                  <Input
-                                    type="number"
-                                    value={payment.amount}
-                                    placeholder="Amount"
-                                    step="0.01"
-                                    onChange={(e) =>
-                                      updatePaymentRow(
-                                        idx,
-                                        "amount",
-                                        e.target.value
-                                      )
-                                    }
-                                    onBlur={() => updateBudget("Draft")}
-                                    className="w-full"
-                                  />
-                                </td>
-                                <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
-                                  <Input
-                                    type="text"
-                                    value={payment.description}
-                                    placeholder="Description"
-                                    onChange={(e) =>
-                                      updatePaymentRow(
-                                        idx,
-                                        "description",
-                                        e.target.value
-                                      )
-                                    }
-                                    onBlur={() => updateBudget("Draft")}
-                                    className="w-full"
-                                  />
-                                </td>
-                                <td className="p-1 border-r border-b text-xs sm:text-sm bg-white">
-                                  <Input
-                                    type="datetime-local"
-                                    value={payment.dueDate}
-                                    min={getMinDueDateString()}
-                                    onChange={(e) =>
-                                      updatePaymentRow(
-                                        idx,
-                                        "dueDate",
-                                        e.target.value
-                                      )
-                                    }
-                                    onBlur={() => updateBudget("Draft")}
-                                    className="w-full"
-                                  />
-                                </td>
-                                <td className="p-1 border-b text-center">
-                                  {payments.length > 1 && (
-                                    <Button
-                                      type="button"
-                                      onClick={() => removePaymentRow(idx)}
-                                      className="transition-all duration-150 transform hover:scale-105 cursor-pointer bg-red-500 text-white px-2 py-1 rounded text-xs"
-                                    >
-                                      {isMobile ? (
-                                        <img
-                                          src={icons["src/assets/delete.svg"]}
-                                          alt="Remove row"
-                                          className="transition-all duration-150 transform hover:scale-105 w-4 h-4 object-cover rounded cursor-pointer"
-                                        />
-                                      ) : (
-                                        <p>Remove</p>
-                                      )}
-                                    </Button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="font-semibold text-sm border-t">
-                              <td className="p-2" colSpan={1}>
-                                Total Payment
-                              </td>
-                              <td className="p-2">
-                                ₱ {calculateTotalPayments()}
-                              </td>
-                              <td className="p-2" colSpan={3}></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        onClick={addPaymentRow}
-                        className="transition-all duration-150 transform hover:scale-105 text-white px-3 py-2 rounded text-sm cursor-pointer bg-green-600"
-                      >
-                        Add Payment
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {/* Overall Summary Section */}
-                <div className="mt-6">
-                  <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                    Overall Budget Summary
-                  </h2>
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-sky-400 text-sm text-white">
-                          <th className="p-2 w-8/20 text-left">Budget Group</th>
-                          <th className="p-2 w-12/20 text-left">
-                            Total Estimated Cost
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {budgetGroups.map((group, idx) => (
-                          <tr key={idx} className="bg-white text-sm">
-                            <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                              {group.groupName || `Group ${idx + 1}`}
-                            </td>
-                            <td className="p-1 px-2 border-b text-xs sm:text-sm bg-white">
-                              ₱ {calculateBudgetGroupTotal(group)}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="font-semibold border-t text-sm bg-white">
-                          <td className="p-2">Overall Total</td>
-                          <td className="p-2">
-                            ₱ {calculateOverallBudgetTotal()}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
                 {errorMsg && (
                   <p ref={errorRef} className="mt-8 text-red-600 text-sm">
@@ -1404,7 +1054,7 @@ export default function EditDraftBudgetModal({
                   setRequestError("Request message is required.");
                   return;
                 }
-                updateBudget("Sent for Approval");
+                updateEvent("Sent for Approval");
               }}
               className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-purple-800 bg-purple-600 text-white px-4 py-2 rounded h-fit"
             >
@@ -1446,7 +1096,7 @@ export default function EditDraftBudgetModal({
   );
 }
 
-EditDraftBudgetModal.propTypes = {
+EditDraftEventModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onGoBack: PropTypes.func,

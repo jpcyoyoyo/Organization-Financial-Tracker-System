@@ -4,7 +4,6 @@ import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
 import { motion } from "framer-motion";
 import backIcon from "../../assets/prev.svg";
-import ApprovalDetailsModal from "../Approvals/ApprovalDetailsModal";
 
 export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   const [details, setDetails] = useState(null);
@@ -23,10 +22,6 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
   const [includePayments, setIncludePayments] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const errorRef = useRef(null);
-  const [approvalHistory, setApprovalHistory] = useState([]);
-  const [approvalHistoryError, setApprovalHistoryError] = useState("");
-  const [selectedApproval, setSelectedApproval] = useState(null);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
 
   const ip = useContext(IpContext);
   const title =
@@ -79,37 +74,8 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
       }
     }
 
-    async function fetchApprovalHistory() {
-      if (!id) return;
-      try {
-        const response = await fetch(`${ip}/fetch-approval-history`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "Budget", relating_id: id }),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch approval history");
-        }
-        const result = await response.json();
-        if (result.status) {
-          setApprovalHistory(result.data);
-          setApprovalHistoryError("");
-        } else {
-          setApprovalHistory([]);
-          setApprovalHistoryError(
-            result.error || "Failed to fetch approval history"
-          );
-        }
-      } catch (error) {
-        console.error("Error fetching approval history:", error);
-        setApprovalHistory([]);
-        setApprovalHistoryError("Error fetching approval history");
-      }
-    }
-
     if (isOpen) {
       fetchDetails();
-      fetchApprovalHistory();
     }
   }, [isOpen, id, ip]);
 
@@ -253,65 +219,6 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-4 px-4 pb-4">
-                    <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Approval History
-                    </h2>
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="bg-sky-300 text-sm">
-                            <th className="p-2 text-left">ID</th>
-                            <th className="p-2 text-left">Decision</th>
-                            <th className="p-2 text-left">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {approvalHistoryError ? (
-                            <tr>
-                              <td
-                                colSpan="3"
-                                className="p-2 text-center text-red-600"
-                              >
-                                {approvalHistoryError}
-                              </td>
-                            </tr>
-                          ) : approvalHistory.length === 0 ? (
-                            <tr>
-                              <td colSpan="3" className="p-2 text-center">
-                                No approval history
-                              </td>
-                            </tr>
-                          ) : (
-                            approvalHistory.map((record, idx) => (
-                              <tr key={idx} className="bg-white text-sm">
-                                <td className="px-2 py-1 border-r">
-                                  {record.id}
-                                </td>
-                                <td className="px-2 py-1 border-r">
-                                  {record.decision !== null
-                                    ? record.decision
-                                    : "Pendeing"}
-                                </td>
-                                <td className="px-2 py-1">
-                                  <Button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedApproval(record);
-                                      setShowApprovalModal(true);
-                                    }}
-                                    className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-2 py-1 rounded"
-                                  >
-                                    View
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
                 </motion.div>
               </div>
             </div>
@@ -397,7 +304,7 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                         <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                           <div>
                             <label className="flex font-semibold">
-                              Tentative Budget Amount
+                              Budget Amount
                             </label>
                             <div className="text-2xl">
                               ₱ {calculateOverallBudgetTotal()}
@@ -433,65 +340,6 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
                               <div>{details.published_at}</div>
                             </div>
                           )}
-                        </div>
-                      </div>
-                      <div className="mt-4 px-4 pb-4">
-                        <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                          Approval History
-                        </h2>
-                        <div className="overflow-x-auto border rounded-lg">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="bg-sky-300 text-sm">
-                                <th className="p-2 text-left">ID</th>
-                                <th className="p-2 text-left">Decision</th>
-                                <th className="p-2 text-left">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {approvalHistoryError ? (
-                                <tr>
-                                  <td
-                                    colSpan="3"
-                                    className="p-2 text-center text-red-600"
-                                  >
-                                    {approvalHistoryError}
-                                  </td>
-                                </tr>
-                              ) : approvalHistory.length === 0 ? (
-                                <tr>
-                                  <td colSpan="3" className="p-2 text-center">
-                                    No approval history
-                                  </td>
-                                </tr>
-                              ) : (
-                                approvalHistory.map((record, idx) => (
-                                  <tr key={idx} className="bg-white text-sm">
-                                    <td className="px-2 py-1 border-r">
-                                      {record.id}
-                                    </td>
-                                    <td className="px-2 py-1 border-r">
-                                      {record.decision !== null
-                                        ? record.decision
-                                        : "Pendeing"}
-                                    </td>
-                                    <td className="px-2 py-1">
-                                      <Button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedApproval(record);
-                                          setShowApprovalModal(true);
-                                        }}
-                                        className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-2 py-1 rounded"
-                                      >
-                                        View
-                                      </Button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
                         </div>
                       </div>
                     </motion.div>
@@ -675,17 +523,6 @@ export default function ViewBudgetModal({ isOpen, onClose, id, refreshData }) {
           )}
         </motion.div>
       </div>
-
-      {showApprovalModal && selectedApproval && (
-        <ApprovalDetailsModal
-          isOpen={showApprovalModal}
-          approvalId={selectedApproval.id}
-          onClose={() => {
-            setShowApprovalModal(false);
-            setSelectedApproval(null);
-          }}
-        />
-      )}
     </>
   );
 }

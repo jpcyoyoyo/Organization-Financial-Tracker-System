@@ -1,65 +1,80 @@
 import { useOutletContext } from "react-router-dom";
-import MainContent from "../../components/ui/MainContent";
-import SearchTableCard from "../../components/ui/SearchTableCard";
-import ViewYourPaymentsModal from "./ViewYourPaymentsModal";
+import MainContent from "../../components/ui/maincontent";
+import SearchListCard from "../../components/ui/searchlistcard";
+import { useContext } from "react";
+import { IpContext } from "../../context/IpContext";
+import EditDraftPaymentModal from "../DraftPayments/EditDraftPaymentModal";
 
-const tableConfig = {
-  createButton: { iconUrl: "src/assets/react.svg", name: "Deposit" },
+const issuedListConfig = {
   columns: [
+    { type: "hidden", name: "id" },
     { type: "icon", iconUrl: "src/assets/react.svg" },
     {
-      type: "data",
-      header: "AMOUNT",
-      w_expand: "w-7/15 lg:w-4/14",
-      w_collapse: "w-2/5 sm:w-2/5 md:w-2/6 lg:w-4/14",
-      alignment: "justify-start",
-      text_size: "font-bold sm:text-lg md:text-xl xl:text-2xl xl:pl-3",
+      type: "double",
+      w_expand: "w-full md:w-8/15 lg:w-9/12",
+      w_collapse: "w-full md:w-5/7 lg:w-4/5",
+      variables: [
+        { key: "", name: "name", mobile: true },
+        { key: "Total Payment", name: "amount", mobile: true },
+      ],
       mobile: true,
-      name: "amount",
     },
     {
-      type: "data",
-      header: "DATE DEPOSIT",
-      w_expand: "w-1/2 lg:w-5/14",
-      w_collapse: "w-3/5 sm:w-3/5 md:w-2/6 lg:w-5/14",
-      alignment: "justify-center",
-      text_size: "text-sm md:text-base",
+      type: "single",
+      w_expand: "w-7/15 lg:w-3/12",
+      w_collapse: "md:w-2/7 lg:w-1/5",
+      key: "Date Issued",
+      name: "issued_at",
       mobile: true,
-      name: "dateDeposited",
     },
-    {
-      type: "data",
-      header: "SOURCE",
-      w_expand: "hidden lg:block w-7/15 lg:w-5/14",
-      w_collapse: "hidden md:block md:w-2/6 lg:w-5/14",
-      alignment: "justify-center",
-      mobile: false,
-      text_size: "text-sm md:text-base",
-      name: "source",
-    },
-    { type: "hidden", name: "id" },
-    { type: "action", name: "View", iconUrl: "src/assets/react.svg" },
   ],
+};
+
+const testData = {
+  data: [
+    {
+      id: 1,
+      name: "Draft Budget 1",
+      amount: "$1,000",
+      created_at: "2021-01-01",
+    },
+    {
+      id: 2,
+      name: "Draft Budget 2",
+      amount: "$2,000",
+      created_at: "2021-02-01",
+    },
+    {
+      id: 3,
+      name: "Draft Budget 3",
+      amount: "$1,000",
+      created_at: "2021-03-01",
+    },
+    {
+      id: 4,
+      name: "Draft Budget 4",
+      amount: "$2,000",
+      created_at: "2021-04-01",
+    },
+    {
+      id: 5,
+      name: "Draft Budget 5",
+      amount: "$1,000",
+      created_at: "2021-05-01",
+    },
+    {
+      id: 6,
+      name: "Draft Budget 6",
+      amount: "$1,000",
+      created_at: "2021-06-01",
+    },
+  ],
+  years: [2021, 2022, 2023],
 };
 
 export default function YourPayments() {
   const { isCollapsed } = useOutletContext();
-
-  const testData = {
-    data: [
-      { id: 1, dateDeposited: "2023-08-01", amount: "₱ 1,000,000.00" },
-      { id: 2, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 3, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 4, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 5, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 6, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-      { id: 7, dateDeposited: "2023-08-01", amount: "₱ 1000.00" },
-      { id: 8, dateDeposited: "2023-07-15", amount: "₱ 1000.00" },
-    ],
-    years: [2021, 2022, 2023],
-  };
-
-  const userData = JSON.stringify(sessionStorage.getItem("user"));
+  const ip = useContext(IpContext);
 
   return (
     <MainContent
@@ -69,28 +84,14 @@ export default function YourPayments() {
       showContentNameMobileOnly={true}
     >
       <div className="space-y-6">
-        <SearchTableCard
-          cardName="UNPAID PAYMENTS"
-          userData={userData}
-          tableConfig={tableConfig}
-          fetchUrl="http://your-api.com/deposits"
+        <SearchListCard
+          cardName="ISSUED PAYMENTS"
+          listConfig={issuedListConfig}
+          fetchUrl={`${ip}/fetch-issued-payments`}
           isCollapsed={isCollapsed}
-          viewModal={ViewYourPaymentsModal}
-          testMode={true}
+          viewModal={EditDraftPaymentModal}
+          testMode={false}
           testData={testData}
-          itemsPerPage={3}
-          cardSize="h-48"
-        />
-        <SearchTableCard
-          cardName="PAID PAYMENTS"
-          userData={userData}
-          tableConfig={tableConfig}
-          fetchUrl="http://your-api.com/deposits"
-          isCollapsed={isCollapsed}
-          viewModal={ViewYourPaymentsModal}
-          testMode={true}
-          testData={testData}
-          itemsPerPage={7}
         />
       </div>
     </MainContent>

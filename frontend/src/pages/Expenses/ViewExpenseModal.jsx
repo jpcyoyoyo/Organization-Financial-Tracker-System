@@ -87,7 +87,7 @@ export default function ViewExpenseModal({ isOpen, onClose, id }) {
 
   const openViewReceiptNoEditModal = (receiptId) => {
     // Instead of fetching data here, simply set the receiptId to open the modal.
-    setViewReceiptID({ id: receiptId });
+    setViewReceiptID(receiptId);
     setShowViewReceiptNoEditModal(true);
   };
 
@@ -326,14 +326,14 @@ export default function ViewExpenseModal({ isOpen, onClose, id }) {
       </Modal>
       {showViewReceiptNoEditModal && viewReceiptID && (
         <ViewReceiptNoEditModal
-          key={`viewReceipt-${viewReceiptID.id}`}
+          key={`viewReceipt-${viewReceiptID}`}
           isOpen={showViewReceiptNoEditModal}
           onClose={() => {
             setShowViewReceiptNoEditModal(false);
             setViewReceiptID(null);
           }}
           ip={ip}
-          receiptId={viewReceiptID.id}
+          id={viewReceiptID} // Pass the ID as required
           isMobile={isMobile}
         />
       )}

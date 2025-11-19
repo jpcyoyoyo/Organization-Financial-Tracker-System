@@ -17,13 +17,13 @@ export default function UpdateAccountModal({
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
   const [sectionId, setSectionId] = useState("");
-  const [designation, setDesignation] = useState("Member"); // default designation
+  const [status, setStatus] = useState("Member");
+  const [designation, setDesignation] = useState("Member");
   const [sections, setSections] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState("");
-  const [notificationType, setNotificationType] = useState("success"); // or "error"
-  // New state for generating a password
+  const [notificationType, setNotificationType] = useState("success");
   const [generateNewPassword, setGenerateNewPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
@@ -34,6 +34,7 @@ export default function UpdateAccountModal({
   const studentIdRef = useRef(null);
   const emailRef = useRef(null);
   const sectionRef = useRef(null);
+  const statusRef = useRef(null);
   const designationRef = useRef(null);
   const errorRef = useRef(null);
 
@@ -105,8 +106,8 @@ export default function UpdateAccountModal({
           setStudentId(data.student_id || "");
           setEmail(data.email || "");
           setSectionId(data.section_id || "");
-          // If designation exists in the fetched data, use it; otherwise default to "Member"
           setDesignation(data.designation || "Member");
+          setStatus(data.status);
         } else {
           console.log(
             "UpdateAccountModal: No data returned from fetch-user-details"
@@ -156,6 +157,7 @@ export default function UpdateAccountModal({
       !studentId.trim() ||
       !email.trim() ||
       !sectionId ||
+      !designation.trim() ||
       !designation.trim()
     ) {
       setErrorMsg("All fields are required.");
@@ -176,6 +178,7 @@ export default function UpdateAccountModal({
       email: email,
       section_id: sectionId,
       designation: designation,
+      status: status,
     };
     if (generateNewPassword) {
       payload.new_password = newPassword;
@@ -241,6 +244,14 @@ export default function UpdateAccountModal({
     }
   }
   function handleSectionBlur() {
+    if (statusRef.current) {
+      statusRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }
+  function handleStatusBlur() {
     if (designationRef.current) {
       designationRef.current.scrollIntoView({
         behavior: "smooth",
@@ -314,6 +325,19 @@ export default function UpdateAccountModal({
                     {section.name}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="mx-0.5">
+              <label className="block text-sm font-semibold">Status</label>
+              <select
+                ref={statusRef}
+                className="w-full border rounded px-2 py-1 h-8"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                onBlur={handleStatusBlur}
+              >
+                <option value="Continuing">Continuing</option>
+                <option value="Not Enrolled">Not Enrolled</option>
               </select>
             </div>
             <div className="mx-0.5">

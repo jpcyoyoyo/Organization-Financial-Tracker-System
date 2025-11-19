@@ -3,16 +3,47 @@ import MainContent from "../../components/ui/maincontent";
 import SearchListCard from "../../components/ui/searchlistcard";
 import { useContext, useState } from "react";
 import { IpContext } from "../../context/IpContext";
-import DecideApprovalModal from "./DecideApprovalModal";
+import CreateDraftEventModal from "./CreateDraftEventModal";
+import EditDraftEventModal from "./EditDraftEventModal";
+import ViewDraftEventModal from "./ViewDraftEventModal";
 
-export default function Approvals() {
+export default function DraftEvents() {
   const { isCollapsed } = useOutletContext();
   const ip = useContext(IpContext);
 
   const [globalRefresh, setGlobalRefresh] = useState(0);
   const refreshAll = () => setGlobalRefresh((prev) => prev + 1);
 
-  const pendingListConfig = {
+  const publishedListConfig = {
+    columns: [
+      { type: "hidden", name: "id" },
+      { type: "icon", iconUrl: "src/assets/react.svg" },
+      {
+        type: "double",
+        w_expand: "w-full md:w-8/15 lg:w-9/12",
+        w_collapse: "w-full md:w-5/7 lg:w-4/5",
+        variables: [
+          { key: "", name: "name", mobile: true },
+          { key: "Total Budget", name: "amount", mobile: true },
+        ],
+        mobile: true,
+      },
+      {
+        type: "single",
+        w_expand: "w-7/15 lg:w-3/12",
+        w_collapse: "md:w-2/7 lg:w-1/5",
+        key: "Date Published",
+        name: "published_at",
+        mobile: true,
+      },
+    ],
+  };
+
+  const listConfig = {
+    createButton: {
+      iconUrl: "src/assets/react.svg",
+      name: "Create Event",
+    },
     columns: [
       { type: "hidden", name: "id" },
       { type: "icon", iconUrl: "src/assets/react.svg" },
@@ -28,8 +59,8 @@ export default function Approvals() {
             nameStyle: "font-semibold text-base",
           },
           {
-            key: "",
-            name: "relating_id",
+            key: "Date",
+            name: "date_range",
             mobile: true,
             nameStyle: "font-normal text-sm",
           },
@@ -40,7 +71,7 @@ export default function Approvals() {
         type: "single",
         w_expand: "w-7/15 lg:w-3/12",
         w_collapse: "md:w-2/7 lg:lg:w-2/7",
-        key: "Date Requested",
+        key: "Date Created",
         name: "created_at",
         mobile: true,
       },
@@ -48,54 +79,10 @@ export default function Approvals() {
         type: "single",
         w_expand: "w-7/15 lg:w-3/12",
         w_collapse: "md:w-2/7 lg:w-2/7",
-        key: "Decision",
-        name: "decision",
+        key: "Status",
+        name: "status",
         mobile: true,
-        default: "Pending",
-      },
-    ],
-  };
-
-  const decidedListConfig = {
-    columns: [
-      { type: "hidden", name: "id" },
-      { type: "icon", iconUrl: "src/assets/react.svg" },
-      {
-        type: "double",
-        w_expand: "w-full md:w-8/15 lg:w-6/12",
-        w_collapse: "w-full md:w-5/7 lg:w-4/7",
-        variables: [
-          {
-            key: "",
-            name: "name",
-            mobile: true,
-            nameStyle: "font-semibold text-base",
-          },
-          {
-            key: "",
-            name: "relating_id",
-            mobile: true,
-            nameStyle: "font-normal text-sm",
-          },
-        ],
-        mobile: true,
-      },
-      {
-        type: "single",
-        w_expand: "w-7/15 lg:w-3/12",
-        w_collapse: "md:w-2/7 lg:lg:w-2/7",
-        key: "Date Decision Made",
-        name: "updated_at",
-        mobile: true,
-      },
-      {
-        type: "single",
-        w_expand: "w-7/15 lg:w-3/12",
-        w_collapse: "md:w-2/7 lg:w-2/7",
-        key: "Decision",
-        name: "decision",
-        mobile: true,
-        default: "Pending",
+        default: "Status",
       },
     ],
   };
@@ -144,44 +131,45 @@ export default function Approvals() {
 
   return (
     <MainContent
-      titletab="Approvals - Organization Financial Tracker"
-      contentName="APPROVALS"
+      titletab="Draft Events - Organization Financial Tracker"
+      contentName="DRAFT EVENTS"
       textFormat="text-3xl pt-1"
       showContentNameMobileOnly={true}
     >
       <div className="space-y-6">
         <SearchListCard
-          cardName="BUDGET APPROVALS"
-          listConfig={pendingListConfig}
-          fetchUrl={`${ip}/fetch-budget-approvals`}
+          cardName="EVENT DRAFTS"
+          listConfig={listConfig}
+          fetchUrl={`${ip}/fetch-draft-events`}
           isCollapsed={isCollapsed}
           testMode={false}
           testData={testData}
-          viewModal={DecideApprovalModal}
-          itemsPerPage={1}
-          cardSize="h-87 md:h-18"
+          itemsPerPage={3}
+          cardSize="h-87 md:h-56"
           mobileCardSize="h-85"
+          createModal={CreateDraftEventModal}
+          viewModal={EditDraftEventModal}
           refreshGlobalData={refreshAll}
           globalRefresh={globalRefresh}
         />
         <SearchListCard
-          cardName="PAYMENT APPROVALS"
-          listConfig={pendingListConfig}
-          fetchUrl={`${ip}/fetch-payment-approvals`}
+          cardName="PENDING EVENT APPROVALS"
+          listConfig={listConfig}
+          fetchUrl={`${ip}/fetch-pending-event-approvals`}
           isCollapsed={isCollapsed}
           testMode={false}
           testData={testData}
-          viewModal={DecideApprovalModal}
           itemsPerPage={2}
           cardSize="h-87 md:h-37"
           mobileCardSize="h-56.5"
+          viewModal={ViewDraftEventModal}
           refreshGlobalData={refreshAll}
           globalRefresh={globalRefresh}
         />
         <SearchListCard
-          cardName="DECIDED APPROVALS"
-          listConfig={decidedListConfig}
-          fetchUrl={`${ip}/fetch-decided-approvals`}
+          cardName="APPROVED EVENTS"
+          listConfig={publishedListConfig}
+          fetchUrl={`${ip}/fetch-published-budgets`}
           isCollapsed={isCollapsed}
           testMode={false}
           testData={testData}

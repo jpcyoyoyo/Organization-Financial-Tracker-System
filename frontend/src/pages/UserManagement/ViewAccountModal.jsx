@@ -158,6 +158,10 @@ export default function ViewAccountModal({
                   </div>
                 </div>
                 <div>
+                  <label className="block font-semibold">Status</label>
+                  <div>{details.status}</div>
+                </div>
+                <div>
                   <label className="block font-semibold">
                     Servicing Points
                   </label>

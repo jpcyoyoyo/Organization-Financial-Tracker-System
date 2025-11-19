@@ -45,6 +45,8 @@ export default function SearchListCard({
   cardSize = "h-87 md:h-97",
   mobileCardSize = "h-120",
   itemsPerPage = 5,
+  refreshGlobalData, // refresh callback passed from parent
+  globalRefresh, // global refresh counter
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
@@ -150,22 +152,20 @@ export default function SearchListCard({
           new Date(a.dateDeposited || a.dateApproved)
       );
 
-      if (sortedData !== data) {
-        setData(sortedData);
-      }
+      setData(sortedData);
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
 
       if (sortedData.length === 0 && data.length === 0) {
         console.warn(
           "No records found, attempting to fetch again in 5 seconds..."
         );
-        timerRef.current = setTimeout(fetchData, 60000);
+        timerRef.current = setTimeout(fetchData, 10000);
       }
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
       setError(error.message);
-      timerRef.current = setTimeout(fetchData, 60000);
+      timerRef.current = setTimeout(fetchData, 10000);
       console.log("Reattempt fetching");
     } finally {
       setLoading(false);
@@ -391,6 +391,12 @@ export default function SearchListCard({
     }
   })();
 
+  useEffect(() => {
+    refreshData();
+    console.log("globalRefresh", globalRefresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalRefresh]);
+
   // ------------------------------
   // Render
   // ------------------------------
@@ -423,12 +429,16 @@ export default function SearchListCard({
       {ViewModal && (
         <ViewModal
           isOpen={showViewModal}
-          onClose={() => setShowViewModal(false)}
+          onClose={() => {
+            setShowViewModal(false);
+            refreshGlobalData();
+          }}
           onGoBack={() => setShowViewModal(true)}
           id={selectedRow?.id || null}
           updateModal={UpdateModal}
           deleteModal={DeleteModal}
           refreshData={refreshData} // Added refresh callback
+          onRefreshGlobalData={refreshGlobalData}
         />
       )}
 
@@ -540,13 +550,13 @@ export default function SearchListCard({
           )}
 
           <div className={`hidden ${isCollapsed ? "md:block" : "lg:block"}`}>
-            {!loading && currentItems.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0.5, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 2 }}
-                transition={{ duration: 0.5 }}
-              >
+            <motion.div
+              initial={{ opacity: 0.5, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 2 }}
+              transition={{ duration: 0.5 }}
+            >
+              {!loading && currentItems.length > 0 && (
                 <div className={`space-y-3 ${cardSize}`}>
                   {currentItems.map((rowData, idx) => (
                     <div
@@ -632,8 +642,8 @@ export default function SearchListCard({
                     </div>
                   ))}
                 </div>
-              </motion.div>
-            )}
+              )}
+            </motion.div>
           </div>
 
           {/* For screens smaller than sm: single-column layout */}
@@ -882,4 +892,6 @@ SearchListCard.propTypes = {
   cardSize: PropTypes.string,
   mobileCardSize: PropTypes.string,
   itemsPerPage: PropTypes.number,
+  refreshGlobalData: PropTypes.func.isRequired,
+  globalRefresh: PropTypes.number,
 };

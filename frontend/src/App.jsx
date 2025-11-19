@@ -46,6 +46,8 @@ import Announcements from "./pages/Announcements/Announcements";
 import Events from "./pages/Events/Events";
 import YourAttendances from "./pages/YourAttendances/YourAttendances";
 import Sections from "./pages/Sections/Sections";
+import DraftEvents from "./pages/DraftEvents/DraftEvents";
+import Servicing from "./pages/Servicing/Servicing";
 
 // Import the sidebar configuration (adjust the path as needed)
 import sidebarConfig from "./data/sidebarConfig.json";
@@ -451,6 +453,22 @@ export default function App() {
                   element={
                     <ProtectedRoute allowedRoutes={allowedRoutes}>
                       <Sections />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="draft-events"
+                  element={
+                    <ProtectedRoute allowedRoutes={allowedRoutes}>
+                      <DraftEvents />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="manage-servicing"
+                  element={
+                    <ProtectedRoute allowedRoutes={allowedRoutes}>
+                      <Servicing />
                     </ProtectedRoute>
                   }
                 />

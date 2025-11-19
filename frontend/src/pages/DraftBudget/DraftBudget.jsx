@@ -1,15 +1,19 @@
 import { useOutletContext } from "react-router-dom";
 import MainContent from "../../components/ui/maincontent";
 import SearchListCard from "../../components/ui/searchlistcard";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { IpContext } from "../../context/IpContext";
 import CreateDraftBudgetModal from "./CreateDraftBudgetModal";
 import EditDraftBudgetModal from "./EditDraftBudgetModal";
 import ViewDraftBudgetModal from "./ViewDraftBudgetModal";
+import DeleteDraftBudgetModal from "./DeleteDraftBudgetModal";
 
 export default function DraftBudget() {
   const { isCollapsed } = useOutletContext();
   const ip = useContext(IpContext);
+
+  const [globalRefresh, setGlobalRefresh] = useState(0);
+  const refreshAll = () => setGlobalRefresh((prev) => prev + 1);
 
   const publishedListConfig = {
     columns: [
@@ -144,9 +148,12 @@ export default function DraftBudget() {
           testData={testData}
           createModal={CreateDraftBudgetModal}
           viewModal={EditDraftBudgetModal}
+          deleteModal={DeleteDraftBudgetModal}
           itemsPerPage={3}
           cardSize="h-87 md:h-56"
           mobileCardSize="h-85"
+          refreshGlobalData={refreshAll}
+          globalRefresh={globalRefresh}
         />
         <SearchListCard
           cardName="PENDING BUDGET APPROVALS"
@@ -159,6 +166,8 @@ export default function DraftBudget() {
           itemsPerPage={2}
           cardSize="h-87 md:h-37"
           mobileCardSize="h-56.5"
+          refreshGlobalData={refreshAll}
+          globalRefresh={globalRefresh}
         />
         <SearchListCard
           cardName="PUBLISHED BUDGETS"
@@ -168,6 +177,8 @@ export default function DraftBudget() {
           testMode={false}
           testData={testData}
           viewModal={ViewDraftBudgetModal}
+          refreshGlobalData={refreshAll}
+          globalRefresh={globalRefresh}
         />
       </div>
     </MainContent>

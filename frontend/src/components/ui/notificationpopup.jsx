@@ -27,7 +27,7 @@ export default function NotificationPopup({ message, type, onClose }) {
       animate={isVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.5 }}
-      className={`fixed bottom-5 right-5 px-6 py-3 rounded border-2 shadow-lg text-white mb-6 ${
+      className={`fixed bottom-5 right-5 px-6 py-3 rounded border-2 shadow-lg text-white mb-6 z-50 ${
         type === "success"
           ? "bg-green-500 border-green-700"
           : "bg-red-500 border-red-700"

@@ -4,12 +4,14 @@ import Modal from "../../components/ui/modal";
 import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
 import DecideBudgetApproval from "./DecideBudgetApproval";
+import DecidePaymentApproval from "./DecidePaymentApproval";
 
 export default function DecideApprovalModal({
   isOpen,
   id,
   refreshData,
   onClose,
+  onRefreshGlobalData,
 }) {
   const ip = useContext(IpContext);
   const [details, setDetails] = useState(null);
@@ -17,8 +19,6 @@ export default function DecideApprovalModal({
   const [error, setError] = useState("");
   const [showDecideBudgetModal, setShowDecideBudgetModal] = useState(false);
   const [showDecidePaymentModal, setShowDecidePaymentModal] = useState(false);
-  const [showDecideAnnouncementModal, setShowDecideAnnouncementModal] =
-    useState(false);
 
   useEffect(() => {
     if (isOpen && id) {
@@ -58,8 +58,6 @@ export default function DecideApprovalModal({
       setShowDecideBudgetModal(true);
     } else if (details.type === "Payment") {
       setShowDecidePaymentModal(true);
-    } else if (details.type === "Announcement") {
-      setShowDecideAnnouncementModal(true);
     }
   };
 
@@ -166,8 +164,23 @@ export default function DecideApprovalModal({
           onClose={() => setShowDecideBudgetModal(false)}
           id={details.relating_id}
           refreshData={refreshData}
-          handleClose={onClose}
+          handleClose={() => {
+            onClose();
+            onRefreshGlobalData();
+          }}
         ></DecideBudgetApproval>
+      )}
+      {showDecidePaymentModal && details.relating_id && (
+        <DecidePaymentApproval
+          isOpen={showDecidePaymentModal}
+          onClose={() => setShowDecidePaymentModal(false)}
+          id={details.relating_id}
+          refreshData={refreshData}
+          handleClose={() => {
+            onClose();
+            onRefreshGlobalData();
+          }}
+        ></DecidePaymentApproval>
       )}
     </>
   );
@@ -178,4 +191,5 @@ DecideApprovalModal.propTypes = {
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onClose: PropTypes.func.isRequired,
   refreshData: PropTypes.func,
+  onRefreshGlobalData: PropTypes.func,
 };
