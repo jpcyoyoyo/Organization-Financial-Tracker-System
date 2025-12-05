@@ -185,7 +185,7 @@ export default function ViewPlannedBudgetModal({
               <p className="text-xl text-gray-600">Loading...</p>
             </div>
           ) : details ? (
-            <div className="h-[calc(100%-44px)] p-1 sm:p-3">
+            <div className="h-full p-1 sm:p-3">
               <div
                 className={`mt-2 md:mt-0 ${
                   details.published_at ? "h-full" : "h-9/10"

@@ -73,6 +73,17 @@ function formatDateTableNoTime(input) {
   return `${day}-${month}-${year}`;
 }
 
+function formatTimeOnly(input) {
+  const date = new Date(input);
+
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  const formattedHours = String(hours).padStart(2, "0");
+
+  return `${formattedHours}:${minutes}`;
+}
+
 function generatePassword(length) {
   let result = "";
   const characters =
@@ -5553,14 +5564,14 @@ app.post("/delete-draft-payment", (req, res) => {
 });
 
 // Route to check if an event group with the given name already exists
-app.post("/check-event-group-exist", (req, res) => {
+app.post("/check-event-exist", (req, res) => {
   const { name } = req.body;
   if (!name) {
     return res
       .status(400)
       .json({ status: false, error: "Event group name is required" });
   }
-  const sql = "SELECT id FROM event_group WHERE name = ? LIMIT 1";
+  const sql = "SELECT id FROM event WHERE name = ? LIMIT 1";
   oms_db.query(sql, [name], (err, results) => {
     if (err) {
       console.error("Error checking event group exist:", err);
@@ -5573,7 +5584,7 @@ app.post("/check-event-group-exist", (req, res) => {
 });
 
 // Route to create a new event group
-app.post("/create-event-group", (req, res) => {
+app.post("/create-event", (req, res) => {
   const { user_data, name, description } = req.body;
   if (!user_data || !name || !description) {
     return res.status(400).json({
@@ -5589,8 +5600,7 @@ app.post("/create-event-group", (req, res) => {
     return res.status(400).json({ status: false, error: "Invalid user data" });
   }
 
-  const sql =
-    "INSERT INTO event_group (name, user_id, description) VALUES (?, ?, ?)";
+  const sql = "INSERT INTO event (name, user_id, description) VALUES (?, ?, ?)";
   oms_db.query(sql, [name, userObj.id, description], (err, result) => {
     if (err) {
       console.error("Error creating event group:", err);
@@ -5610,11 +5620,10 @@ app.post("/fetch-draft-events", (req, res) => {
     SELECT 
       id, 
       name, 
+      date,
       created_at, 
-      start_date, 
-      end_date,
       status
-    FROM event_group
+    FROM event
   `;
 
   let conditions = [];
@@ -5625,7 +5634,7 @@ app.post("/fetch-draft-events", (req, res) => {
 
   // Additional filtering based on mode
   if (mode === "Search") {
-    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    conditions.push("name LIKE ?");
     const pattern = `%${searchTerm}%`;
     params.push(pattern, pattern);
   } else if (mode === "Filter") {
@@ -5684,23 +5693,8 @@ app.post("/fetch-draft-events", (req, res) => {
         event.created_at = formatDateTableNoTime(event.created_at);
       }
 
-      // Format start and end dates for the event using formatDateTableNoTime
-      const formattedStart = event.start_date
-        ? formatDateTableNoTime(event.start_date)
-        : null;
-      const formattedEnd = event.end_date
-        ? formatDateTableNoTime(event.end_date)
-        : null;
-
-      if (!formattedStart && !formattedEnd) {
-        event.date_range = "Not Yet Set";
-      } else if (formattedStart && formattedEnd) {
-        event.date_range =
-          formattedStart === formattedEnd
-            ? formattedStart
-            : formattedStart + " - " + formattedEnd;
-      } else {
-        event.date_range = formattedStart ? formattedStart : formattedEnd;
+      if (event.date === null) {
+        event.date = "Not Set";
       }
 
       return event;
@@ -5827,7 +5821,7 @@ app.post("/fetch-draft-event-details", (req, res) => {
   }
 
   const sql =
-    "SELECT *, approved_at as approved_at_orig FROM event_group WHERE id = ?";
+    "SELECT *, approved_at as approved_at_orig FROM event WHERE id = ?";
   oms_db.query(sql, [id], (err, results) => {
     if (err) {
       console.error("Error fetching event details:", err);
@@ -5851,6 +5845,43 @@ app.post("/fetch-draft-event-details", (req, res) => {
         draftEvent.published_at = formatDate(draftEvent.published_at);
       }
 
+      // Parse time_period (format: "HH:MM-HH:MM") if available
+      if (draftEvent.time_period) {
+        const [start, end] = draftEvent.time_period.split("-");
+        draftEvent.start_time = start ? start.trim() : null;
+        draftEvent.end_time = end ? end.trim() : null;
+      } else if (draftEvent.start_date && draftEvent.end_date) {
+        // Fallback to parsing from start_date/end_date for backward compatibility
+        draftEvent.start_time = formatTimeOnly(draftEvent.start_date);
+        draftEvent.end_time = formatTimeOnly(draftEvent.end_date);
+      } else {
+        draftEvent.start_time = null;
+        draftEvent.end_time = null;
+      }
+
+      // Parse date from date field or start_date for backward compatibility
+      if (draftEvent.date) {
+        draftEvent.date = formatDateTableNoTime(draftEvent.date);
+      } else if (draftEvent.start_date) {
+        draftEvent.date = formatDateTableNoTime(draftEvent.start_date);
+      } else {
+        draftEvent.date = null;
+      }
+
+      // Parse attendances JSON if stored as string
+      if (typeof draftEvent.attendances === "string") {
+        try {
+          draftEvent.attendances = JSON.parse(draftEvent.attendances);
+        } catch (e) {
+          draftEvent.attendances = [];
+        }
+      }
+
+      // For backward compatibility, also expose breakdown field if attendances exists
+      if (draftEvent.attendances && !draftEvent.breakdown) {
+        draftEvent.breakdown = draftEvent.attendances;
+      }
+
       return draftEvent;
     });
 
@@ -5864,31 +5895,34 @@ app.post("/update-draft-event", (req, res) => {
     id,
     name,
     description,
-    breakdown, // expected to be the attendance groups data
-    start_date,
-    end_date,
+    date,
+    start_time,
+    end_time,
+    time_period,
     status,
     request_message,
   } = req.body;
 
-  if (
-    !id ||
-    !name ||
-    !description ||
-    !breakdown ||
-    !start_date ||
-    !end_date ||
-    !status
-  ) {
-    return res
-      .status(400)
-      .json({ status: false, error: "All fields are required" });
+  // For "Sent for Approval" status, require all fields
+  if (status === "Sent for Approval") {
+    if (!id || !name || !description || !date || !status) {
+      return res
+        .status(400)
+        .json({ status: false, error: "All fields are required" });
+    }
   }
 
-  const userObj = JSON.parse(user_data);
-
+  // For "Draft" status, allow partial updates (auto-save)
   if (status === "Sent for Approval") {
+    // Accept attendance JSON under multiple keys for backward compatibility
+    const breakdownData =
+      req.body.breakdown || req.body.attendances || req.body.attendance || [];
     // First create an approval record for the event.
+    if (!id || !name || !description || !date || !status) {
+      return res
+        .status(400)
+        .json({ status: false, error: "All fields are required" });
+    }
     const approvalName = "Approval for " + name;
     const approvalSql = `
       INSERT INTO approval (name, type, relating_id, request_message, user_id)
@@ -5905,14 +5939,35 @@ app.post("/update-draft-event", (req, res) => {
             .json({ status: false, error: "Internal Server Error" });
         }
         const approval_id = approvalResult.insertId;
+
+        // Parse time_period if provided (format: "HH:MM-HH:MM"), otherwise use start_time/end_time
+        let timePeriodStr = time_period;
+        if (!timePeriodStr && start_time && end_time) {
+          timePeriodStr = `${start_time}-${end_time}`;
+        }
+
+        // Build start_date and end_date from date and time range (for backward compatibility)
+        const startDatetime = start_time
+          ? `${date} ${start_time}:00`
+          : `${date} 00:00:00`;
+        const endDatetime = end_time
+          ? `${date} ${end_time}:00`
+          : `${date} 23:59:59`;
+
+        // Accept attendance JSON under multiple keys for backward compatibility
+        const breakdownData =
+          req.body.breakdown ||
+          req.body.attendances ||
+          req.body.attendance ||
+          [];
+
         // Now update the event with the new approval_id.
         const sql = `
-        UPDATE event_group 
+        UPDATE event
         SET name = ?, 
             description = ?, 
-            breakdown = ?, 
-            start_date = ?,
-            end_date = ?,
+            attendances = ?, 
+            time_period = ?,
             status = ?, 
             approval_id = ?
         WHERE id = ?
@@ -5922,9 +5977,8 @@ app.post("/update-draft-event", (req, res) => {
           [
             name,
             description,
-            JSON.stringify(breakdown),
-            start_date,
-            end_date,
+            JSON.stringify(breakdownData),
+            timePeriodStr || null,
             status,
             approval_id,
             id,
@@ -5942,7 +5996,7 @@ app.post("/update-draft-event", (req, res) => {
                 .json({ status: false, error: "Event not found" });
             }
             // Fetch the updated event record.
-            const fetchSql = "SELECT * FROM event_group WHERE id = ?";
+            const fetchSql = "SELECT * FROM event WHERE id = ?";
             oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
               if (fetchErr) {
                 console.error("Error fetching updated event:", fetchErr);
@@ -5953,6 +6007,24 @@ app.post("/update-draft-event", (req, res) => {
               const data = fetchResults.map((event) => {
                 event.updated_at = formatDate(event.updated_at);
                 event.created_at = formatDate(event.created_at);
+                // Parse time_period into start_time and end_time
+                if (event.time_period) {
+                  const [start, end] = event.time_period.split("-");
+                  event.start_time = start.trim();
+                  event.end_time = end.trim();
+                } else {
+                  event.start_time = null;
+                  event.end_time = null;
+                }
+                event.date = formatDateTableNoTime(event.date);
+                // Parse attendances JSON if needed
+                if (typeof event.attendances === "string") {
+                  try {
+                    event.attendances = JSON.parse(event.attendances);
+                  } catch (e) {
+                    event.attendances = [];
+                  }
+                }
                 return event;
               });
               return res.json({ status: true, data: data[0] });
@@ -5961,58 +6033,123 @@ app.post("/update-draft-event", (req, res) => {
         );
       }
     );
-  } else {
-    // Normal update without creating an approval record.
+  } else if (status === "Draft") {
+    // Draft auto-save: allow partial updates, don't require all fields
+    if (!id) {
+      return res
+        .status(400)
+        .json({ status: false, error: "Event ID is required" });
+    }
+
+    // Parse time_period if provided (format: "HH:MM-HH:MM"), otherwise use start_time/end_time
+    let timePeriodStr = time_period;
+    if (!timePeriodStr && start_time && end_time) {
+      timePeriodStr = `${start_time}-${end_time}`;
+    }
+
+    // Accept attendance JSON under multiple keys for backward compatibility
+    const breakdownData =
+      req.body.breakdown || req.body.attendances || req.body.attendance || [];
+
+    // Build dynamic SQL for partial updates
+    let updateFields = [];
+    let updateValues = [];
+
+    if (name !== undefined) {
+      updateFields.push("name = ?");
+      updateValues.push(name);
+    }
+    if (description !== undefined) {
+      updateFields.push("description = ?");
+      updateValues.push(description);
+    }
+    if (date !== undefined) {
+      updateFields.push("date = ?");
+      updateValues.push(date);
+    }
+    if (timePeriodStr !== undefined) {
+      updateFields.push("time_period = ?");
+      updateValues.push(timePeriodStr || null);
+    }
+    if (breakdownData && breakdownData.length > 0) {
+      updateFields.push("attendances = ?");
+      updateValues.push(JSON.stringify(breakdownData));
+    }
+    if (status !== undefined) {
+      updateFields.push("status = ?");
+      updateValues.push(status);
+    }
+
+    // Always update updated_at timestamp
+    updateFields.push("updated_at = NOW()");
+
+    updateValues.push(id);
+
+    if (updateFields.length === 1) {
+      // Only updated_at, still proceed
+      updateFields.push("id = id"); // No-op to ensure valid SQL
+    }
+
     const sql = `
-      UPDATE event_group 
-      SET name = ?, 
-          description = ?, 
-          breakdown = ?, 
-          start_date = ?,
-          end_date = ?,
-          status = ?
+      UPDATE event 
+      SET ${updateFields.join(", ")}
       WHERE id = ?
     `;
-    oms_db.query(
-      sql,
-      [
-        name,
-        description,
-        JSON.stringify(breakdown),
-        start_date,
-        end_date,
-        status,
-        id,
-      ],
-      (err, result) => {
-        if (err) {
-          console.error("Error updating event:", err);
+
+    oms_db.query(sql, updateValues, (err, result) => {
+      if (err) {
+        console.error("Error updating draft event:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Event not found" });
+      }
+
+      // Fetch the updated event record
+      const fetchSql = "SELECT * FROM event WHERE id = ?";
+      oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
+        if (fetchErr) {
+          console.error("Error fetching updated draft event:", fetchErr);
           return res
             .status(500)
             .json({ status: false, error: "Internal Server Error" });
         }
-        if (result.affectedRows === 0) {
-          return res
-            .status(404)
-            .json({ status: false, error: "Event not found" });
-        }
-        const fetchSql = "SELECT * FROM event_group WHERE id = ?";
-        oms_db.query(fetchSql, [id], (fetchErr, fetchResults) => {
-          if (fetchErr) {
-            console.error("Error fetching updated event:", fetchErr);
-            return res
-              .status(500)
-              .json({ status: false, error: "Internal Server Error" });
+
+        const data = fetchResults.map((event) => {
+          event.updated_at = formatDate(event.updated_at);
+          event.created_at = formatDate(event.created_at);
+          // Parse time_period into start_time and end_time
+          if (event.time_period) {
+            const [start, end] = event.time_period.split("-");
+            event.start_time = start.trim();
+            event.end_time = end.trim();
+          } else {
+            event.start_time = null;
+            event.end_time = null;
           }
-          const data = fetchResults.map((event) => {
-            event.updated_at = formatDate(event.updated_at);
-            event.created_at = formatDate(event.created_at);
-            return event;
-          });
-          return res.json({ status: true, data: data[0] });
+          event.date = formatDateTableNoTime(event.date);
+          // Parse attendances JSON if needed
+          if (typeof event.attendances === "string") {
+            try {
+              event.attendances = JSON.parse(event.attendances);
+            } catch (e) {
+              event.attendances = [];
+            }
+          }
+          return event;
         });
-      }
-    );
+        return res.json({ status: true, data: data[0] });
+      });
+    });
+  } else {
+    // Unknown status
+    return res
+      .status(400)
+      .json({ status: false, error: "Invalid status provided" });
   }
 });
 

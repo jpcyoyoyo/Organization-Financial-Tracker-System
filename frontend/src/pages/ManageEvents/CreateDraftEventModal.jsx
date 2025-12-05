@@ -34,7 +34,7 @@ export default function CreateDraftEventModal({
   // Checks if user already exists
   async function checkDraftExist() {
     try {
-      const res = await fetch(`${ip}/check-event-group-exist`, {
+      const res = await fetch(`${ip}/check-event-exist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,7 +65,7 @@ export default function CreateDraftEventModal({
       return;
     }
     try {
-      const res = await fetch(`${ip}/create-event-group`, {
+      const res = await fetch(`${ip}/create-event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

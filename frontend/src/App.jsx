@@ -46,7 +46,7 @@ import Announcements from "./pages/Announcements/Announcements";
 import Events from "./pages/Events/Events";
 import YourAttendances from "./pages/YourAttendances/YourAttendances";
 import Sections from "./pages/Sections/Sections";
-import DraftEvents from "./pages/DraftEvents/DraftEvents";
+import ManageEvents from "./pages/ManageEvents/ManageEvents";
 import Servicing from "./pages/Servicing/Servicing";
 
 // Import the sidebar configuration (adjust the path as needed)
@@ -457,10 +457,10 @@ export default function App() {
                   }
                 />
                 <Route
-                  path="draft-events"
+                  path="manage-events"
                   element={
                     <ProtectedRoute allowedRoutes={allowedRoutes}>
-                      <DraftEvents />
+                      <ManageEvents />
                     </ProtectedRoute>
                   }
                 />

@@ -91,7 +91,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       const activeTab = scrollRef.current.querySelector(".active-tab");
       if (activeTab) {
         scrollRef.current.scrollTo({
-          top: activeTab.offsetTop,
+          top: activeTab.offsetTop - 25,
           behavior: "smooth",
         });
       }

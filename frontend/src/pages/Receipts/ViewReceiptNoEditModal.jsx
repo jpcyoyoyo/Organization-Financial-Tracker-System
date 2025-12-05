@@ -140,7 +140,7 @@ const ViewReceiptNoEditModal = ({ isOpen, onClose, ip, id, isMobile }) => {
                   <label className="block font-semibold">
                     Relating {receiptDetails.type} Record ID
                   </label>
-                  <div>{receiptDetails.relating_id}</div>
+                  <div>{receiptDetails.relating_id || "None"}</div>
                 </div>
                 <div className="col-span-1 sm:col-span-2">
                   <label className="block font-semibold">Issued By</label>

@@ -7,7 +7,7 @@ import CreateDraftEventModal from "./CreateDraftEventModal";
 import EditDraftEventModal from "./EditDraftEventModal";
 import ViewDraftEventModal from "./ViewDraftEventModal";
 
-export default function DraftEvents() {
+export default function ManageEvents() {
   const { isCollapsed } = useOutletContext();
   const ip = useContext(IpContext);
 
@@ -60,7 +60,7 @@ export default function DraftEvents() {
           },
           {
             key: "Date",
-            name: "date_range",
+            name: "date",
             mobile: true,
             nameStyle: "font-normal text-sm",
           },

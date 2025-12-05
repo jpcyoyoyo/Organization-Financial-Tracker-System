@@ -431,7 +431,9 @@ export default function SearchListCard({
           isOpen={showViewModal}
           onClose={() => {
             setShowViewModal(false);
-            refreshGlobalData();
+            if (refreshGlobalData && typeof refreshGlobalData === 'function') {
+              refreshGlobalData();
+            }
           }}
           onGoBack={() => setShowViewModal(true)}
           id={selectedRow?.id || null}

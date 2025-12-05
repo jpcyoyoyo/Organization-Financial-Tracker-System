@@ -21,6 +21,7 @@ export default function ViewManageExpenseModal({
   updateModal: UpdateModal,
   deleteModal: DeleteModal,
   refreshData,
+  onRefreshGlobalData,
 }) {
   const [name, setName] = useState("");
   const [details, setDetails] = useState(null);
@@ -1627,4 +1628,5 @@ ViewManageExpenseModal.propTypes = {
   updateModal: PropTypes.elementType,
   deleteModal: PropTypes.elementType,
   refreshData: PropTypes.func,
+  onRefreshGlobalData: PropTypes.func,
 };
