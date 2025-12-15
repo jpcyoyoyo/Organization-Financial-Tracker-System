@@ -1,4 +1,7 @@
 {
-    "enrollmentHistory": [{"semester_id": 0, "status": "Status", "section": 0},{"semester_id": 0, "status": "Status", "section": 0}, {"semester_id": 0, "status": "Status", "section": 0}]
-      
+    "enrollmentHistory": [
+        {"semester_id": 0, "status": "Status", "section": 0},
+        {"semester_id": 0, "status": "Status", "section": 0}, 
+        {"semester_id": 0, "status": "Status", "section": 0}
+    ]
 }

@@ -6,13 +6,15 @@ import {
   useMemo,
   useCallback,
   useRef,
+  useContext,
 } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import configData from "../../data/sidebarConfig.json";
 import Logo from "../../components/ui/logo";
 import ProfilePic from "../../components/ui/profilepic";
 import { icons } from "../../assets/icons";
+import { IpContext } from "../../context/IpContext";
 
 const getSidebarConfig = (designation) => {
   const topLevelTabs = configData.topLevelTabs;
@@ -48,7 +50,10 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   });
 
   const location = useLocation();
+  const navigate = useNavigate();
   const scrollRef = useRef(null);
+
+  const ip = useContext(IpContext);
 
   useEffect(() => {
     const updateUserData = () => {
@@ -84,6 +89,18 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       setIsCollapsed(true);
     }
   }, [setIsCollapsed]);
+
+  // Handle profile picture click
+  const handleProfileClick = useCallback(() => {
+    // Prevent profile access for admins
+    if (userData.designation === "Admin") {
+      return;
+    }
+    navigate("/profile");
+    if (window.innerWidth < 768) {
+      setIsCollapsed(true);
+    }
+  }, [navigate, setIsCollapsed, userData.designation]);
 
   // When the location changes, scroll the active tab into view (at the top)
   useEffect(() => {
@@ -139,7 +156,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   : "block opacity-100 scale-100"
               }`}
             >
-              COMSOC OFS
+              COMSOC OMS
             </span>
           </div>
 
@@ -149,7 +166,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             } items-center space-x-2`}
           >
             <ProfilePic
-              profilePic={icons[userData.profile_pic] || userData.profile_pic}
+              profilePic={
+                icons[userData.profile_pic] ||
+                `${ip}/profile-pic/${userData.profile_pic}`
+              }
+              onClick={handleProfileClick}
+              isAdmin={userData.designation === "Admin"}
             />
             {!isCollapsed && (
               <div className="pl-2 w-40">
@@ -158,10 +180,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               </div>
             )}
             {!isCollapsed && (
-              <NavLink
-                to="/editprofile"
-                className="hidden justify-items-center w-16 px-3 py-2 rounded-xl text-base text-center transition hover:-translate-y-0.5 bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e]"
-              >
+              <NavLink className="hidden justify-items-center w-16 px-3 py-2 rounded-xl text-base text-center transition hover:-translate-y-0.5 bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e]">
                 Edit
               </NavLink>
             )}
@@ -178,76 +197,84 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             ref={scrollRef}
           >
             <ul className="space-y-0.5">
-              {config.topLevelTabs.map((tab) => (
-                <li key={tab.path}>
-                  <NavLink
-                    to={tab.path}
-                    onClick={handleNavClick}
-                    className={({ isActive }) =>
-                      `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
-                        isCollapsed ? "justify-center" : ""
-                      } ${
-                        isActive
-                          ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
-                          : "hover:bg-[#9494945d]"
-                      }`
-                    }
-                  >
-                    <img
-                      src={icons[tab.icon] || tab.icon}
-                      alt={tab.label}
-                      className="w-6 h-6"
-                    />
-                    {!isCollapsed && (
-                      <span className="transition-opacity duration-300 ml-3">
-                        {tab.label}
-                      </span>
-                    )}
-                  </NavLink>
-                </li>
-              ))}
+              {config.topLevelTabs
+                .filter((tab) => !tab.hide)
+                .map((tab) => (
+                  <li key={tab.path}>
+                    <NavLink
+                      to={tab.path}
+                      onClick={handleNavClick}
+                      className={({ isActive }) =>
+                        `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
+                          isCollapsed ? "justify-center" : ""
+                        } ${
+                          isActive
+                            ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
+                            : "hover:bg-[#9494945d]"
+                        }`
+                      }
+                    >
+                      <img
+                        src={icons[tab.icon] || tab.icon}
+                        alt={tab.label}
+                        className="w-6 h-6"
+                      />
+                      {!isCollapsed && (
+                        <span className="transition-opacity duration-300 ml-3">
+                          {tab.label}
+                        </span>
+                      )}
+                    </NavLink>
+                  </li>
+                ))}
             </ul>
-            {config.groups.map((group) => (
-              <div key={group.groupName} className="mt-5">
-                <h3
-                  className={`px-3 py-1 text-xs font-semibold text-gray-700 uppercase ${
-                    isCollapsed ? "hidden" : "block"
-                  }`}
-                >
-                  {group.groupName}
-                </h3>
-                <ul>
-                  {group.tabs.map((tab) => (
-                    <li key={tab.path}>
-                      <NavLink
-                        to={tab.path}
-                        onClick={handleNavClick}
-                        className={({ isActive }) =>
-                          `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
-                            isCollapsed ? "justify-center" : ""
-                          } ${
-                            isActive
-                              ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
-                              : "hover:bg-[#9494945d]"
-                          }`
-                        }
-                      >
-                        <img
-                          src={icons[tab.icon] || tab.icon}
-                          alt={tab.label}
-                          className="w-6 h-6"
-                        />
-                        {!isCollapsed && (
-                          <span className="transition-opacity duration-300 ml-3">
-                            {tab.label}
-                          </span>
-                        )}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {config.groups.map((group) => {
+              // Only show group if it has visible tabs
+              const visibleTabs = group.tabs.filter((tab) => !tab.hide);
+              if (visibleTabs.length === 0) return null;
+
+              return (
+                <div key={group.groupName} className="mt-5">
+                  <h3
+                    className={`px-3 py-1 text-xs font-semibold text-gray-700 uppercase ${
+                      isCollapsed ? "hidden" : "block"
+                    }`}
+                  >
+                    {group.groupName}
+                  </h3>
+                  <ul>
+                    {visibleTabs.map((tab) => (
+                      <li key={tab.path}>
+                        <NavLink
+                          to={tab.path}
+                          onClick={handleNavClick}
+                          className={({ isActive }) =>
+                            `relative z-10 flex place-items-center p-2 rounded-lg text-sm md:text-base transition hover:-translate-y-0.5 mt-0.5 ${
+                              isCollapsed ? "justify-center" : ""
+                            } ${
+                              isActive
+                                ? "bg-[#ffc34c] text-white font-bold hover:bg-[#d9ab4e] -translate-y-0.5 hover:translate-y-0.5 active-tab"
+                                : "hover:bg-[#9494945d]"
+                            }`
+                          }
+                        >
+                          <img
+                            src={icons[tab.icon] || tab.icon}
+                            alt={tab.label}
+                            className="w-6 h-6"
+                          />
+                          {!isCollapsed && (
+                            <span className="transition-opacity duration-300 ml-3">
+                              {tab.label}
+                            </span>
+                          )}
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
             <div className="h-40"></div>
           </div>
         </div>

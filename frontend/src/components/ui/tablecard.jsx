@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
+import { Button } from "./button";
 
 // Helper to convert a fraction string like "1/3" into a percentage width
 function getColumnWidth(fraction) {
@@ -24,36 +25,50 @@ export default function TableCard({
 }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(fetchUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.parse(userData),
-        });
-        const result = await response.json();
-
-        // Ensure we set the data to an array
-        if (result && Array.isArray(result.users)) {
-          setData(result.users);
-        } else {
-          console.error("Unexpected response format:", result);
-          setData([]); // Default to an empty array to prevent errors
-        }
-      } catch (error) {
-        console.error("Error fetching table data:", error);
-        setData([]); // Default to an empty array on error
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      // Handle userData that might be a string or already an object
+      let userDataObj = userData;
+      if (typeof userData === "string") {
+        userDataObj = JSON.parse(userData);
       }
-    };
 
-    fetchData();
+      const response = await fetch(fetchUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userDataObj),
+      });
+      const result = await response.json();
+
+      // Ensure we set the data to an array
+      if (result && Array.isArray(result.users)) {
+        setData(result.users);
+      } else {
+        console.error("Unexpected response format:", result);
+        setData([]); // Default to an empty array to prevent errors
+      }
+    } catch (err) {
+      console.error("Error fetching table data:", err);
+      setError(err.message);
+      setData([]); // Default to an empty array on error
+    } finally {
+      setLoading(false);
+    }
   }, [fetchUrl, userData]);
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return (
     <div
@@ -65,40 +80,62 @@ export default function TableCard({
       >
         {title}
       </h2>
-      <div className={`card shadow-lg rounded-b-xl bg-white ${h}`}>
+      <div
+        className={`card shadow-lg rounded-b-xl bg-white ${h} overflow-hidden flex flex-col`}
+      >
         {loading ? (
-          <div className="px-5">Loading...</div>
+          <div className="px-5 flex items-center justify-center h-full">
+            Loading...
+          </div>
+        ) : error ? (
+          <div className="px-5 flex flex-col items-center justify-center h-full gap-4">
+            <p className="text-sm text-red-600">{error}</p>
+            <Button
+              type="button"
+              onClick={handleRefresh}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer transition-all duration-150"
+            >
+              Refresh
+            </Button>
+          </div>
         ) : (
-          <table className="w-full font-[inter]">
-            <thead>
-              <tr>
-                {tableConfig.columns.map((col, index) => (
-                  <th
-                    key={index}
-                    className="text-left text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-b border-gray-300 font-normal"
-                    style={{ width: getColumnWidth(col.fraction) }}
-                  >
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row, rowIndex) => (
-                <tr key={rowIndex} className="">
-                  {tableConfig.columns.map((col, colIndex) => (
-                    <td
-                      key={colIndex}
-                      className="text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-gray-200"
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full font-[inter]">
+              <thead>
+                <tr>
+                  {tableConfig.columns.map((col, index) => (
+                    <th
+                      key={index}
+                      className="text-left text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-b border-gray-300 font-normal"
                       style={{ width: getColumnWidth(col.fraction) }}
                     >
-                      {row[col.variable]}
-                    </td>
+                      {col.header}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.map((row, rowIndex) => (
+                  <tr key={rowIndex} className="">
+                    {tableConfig.columns.map((col, colIndex) => (
+                      <td
+                        key={colIndex}
+                        className={`text-xs sm:text-sm px-2.5 md:px-5 py-0.5 md:py-1 border-gray-200 truncate ${
+                          row.dueDateColor && col.variable === "date_due"
+                            ? row.dueDateColor
+                            : ""
+                        }`}
+                        style={{ width: getColumnWidth(col.fraction) }}
+                        title={row[col.variable]}
+                      >
+                        {row[col.variable]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

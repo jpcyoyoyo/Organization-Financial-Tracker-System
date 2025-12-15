@@ -78,7 +78,10 @@ export default function ViewAccountModal({
               {/* Header Section: Stack vertically on mobile */}
               <div className="flex flex-col sm:flex-row w-full items-center">
                 <img
-                  src={icons[details.profile_pic] || details.profile_pic}
+                  src={
+                    icons[details.profile_pic] ||
+                    `${ip}/profile-pic/${details.profile_pic}`
+                  }
                   alt="Profile"
                   className="w-32 h-32 bg-yellow-300 object-cover rounded"
                 />

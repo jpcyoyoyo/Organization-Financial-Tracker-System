@@ -632,7 +632,7 @@ export default function ViewDraftBudgetModal({
                       {/* Items Table for the Group */}
                       <div className="border rounded-lg overflow-clip">
                         <div className="overflow-x-auto">
-                          <table className="min-w-[450px] w-full border-collapse">
+                          <table className="min-w-112.5 w-full border-collapse">
                             <thead>
                               <tr className="bg-sky-400 text-sm text-white">
                                 <th className="p-2 text-left w-3/7 rounded-tl-lg">
@@ -684,7 +684,7 @@ export default function ViewDraftBudgetModal({
                       Payments
                     </h2>
                     <div className="overflow-x-auto border rounded-lg bg-white">
-                      <table className="min-w-[450px] w-full border-collapse">
+                      <table className="min-w-112.5 w-full border-collapse">
                         <thead>
                           <tr className="bg-sky-400 text-sm text-white">
                             <th className="p-2 text-left rounded-tl-lg">

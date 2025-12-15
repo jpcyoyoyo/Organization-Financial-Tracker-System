@@ -182,6 +182,7 @@ export default function CreateAccountModal({
         "StudentNo",
         "First Name",
         "Middle Name",
+        "Surname",
         "Email",
         "Year",
         "Section",

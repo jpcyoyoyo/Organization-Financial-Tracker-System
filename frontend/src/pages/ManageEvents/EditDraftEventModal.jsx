@@ -4,7 +4,6 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useOutletContext } from "react-router-dom";
 import { IpContext } from "../../context/IpContext";
-import { icons } from "../../assets/icons";
 import { motion } from "framer-motion";
 import backIcon from "../../assets/prev.svg";
 import Modal from "../../components/ui/modal";
@@ -37,6 +36,7 @@ export default function EditDraftEventModal({
   const keyLockRef = useRef(false);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
 
   const [showDelete, setShowDelete] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -53,8 +53,184 @@ export default function EditDraftEventModal({
   const ip = useContext(IpContext);
   const title = "EDIT DRAFT EVENT";
 
-  const formatDateForInput = (date) =>
-    new Date(date).toISOString().slice(0, 10);
+  const formatDateForInput = (date) => {
+    if (!date) return "";
+
+    // Handle "YYYY-MM-DD" format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+
+    // Handle "DD-MM-YYYY" format
+    if (/^\d{2}-\d{2}-\d{4}$/.test(date)) {
+      const [day, month, year] = date.split("-");
+      return `${year}-${month}-${day}`;
+    }
+
+    // Handle "Month DD, YYYY at HH:MM:SS AM/PM" or other JS-parseable formats
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) {
+      return parsedDate.toISOString().slice(0, 10);
+    }
+
+    // Fallback: return as-is if unparseable
+    return date;
+  };
+
+  // Fetch draft event details and populate modal state
+  const fetchDraftDetails = async () => {
+    setLoading(true);
+    if (!id) return setLoading(false);
+    try {
+      const response = await fetch(`${ip}/fetch-draft-event-details`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error("Failed to fetch details");
+      const result = await response.json();
+      if (result.status) {
+        const data = result.data;
+        setDetails(data);
+        setEventName(data.name || "");
+        setEventDescription(data.description || "");
+        setEventDate(data.date ? formatDateForInput(data.date) : "");
+
+        // Parse time_period if provided (format: "HH:MM-HH:MM"), otherwise use start_time/end_time
+        if (data.time_period) {
+          const [start, end] = data.time_period.split("-").map((t) => t.trim());
+          setStartTime(start || "");
+          setEndTime(end || "");
+        } else {
+          setStartTime(data.start_time || "");
+          setEndTime(data.end_time || "");
+        }
+
+        // Parse attendances or breakdown JSON
+        const attendanceData = data.attendances || data.breakdown;
+        if (
+          attendanceData &&
+          Array.isArray(attendanceData) &&
+          attendanceData.length > 0
+        ) {
+          try {
+            const parsedAttendance =
+              typeof attendanceData === "string"
+                ? JSON.parse(attendanceData)
+                : attendanceData;
+            // Normalize attendance structure
+            const normalized = parsedAttendance.map((group, idx) => {
+              const gDate = group.date || data.date || eventDate || today;
+              const rawRows = group.rows || [];
+              const rows = rawRows.map((r) => {
+                if (r.start_time !== undefined) {
+                  return {
+                    process: r.process || "",
+                    start_time: r.start_time || "",
+                    cutoff: r.cutoff || "",
+                  };
+                }
+                return {
+                  process: r.process || "",
+                  start_time: r.time || "",
+                  cutoff: r.cutoff || "",
+                };
+              });
+              if (rows.length === 0) {
+                rows.push({ process: "In", start_time: "", cutoff: "" });
+                rows.push({ process: "Out", start_time: "", cutoff: "" });
+              } else {
+                if (rows[0].process !== "In") {
+                  rows.unshift({ process: "In", start_time: "", cutoff: "" });
+                }
+                if (rows[rows.length - 1].process !== "Out") {
+                  rows.push({ process: "Out", start_time: "", cutoff: "" });
+                }
+              }
+              let period_start = group.period_start || "";
+              let period_end = group.period_end || "";
+              const times = rows.map((r) => r.start_time).filter(Boolean);
+              if (!period_start && times.length)
+                period_start = times.reduce((a, b) => (a < b ? a : b));
+              if (!period_end && times.length)
+                period_end = times.reduce((a, b) => (a > b ? a : b));
+              let name = group.name || "";
+              let custom_name = !!group.name;
+              if (!name) {
+                const label =
+                  getPeriodFromTime(period_start) ||
+                  getPeriodFromTime(period_end);
+                if (label) name = `${label} Attendance Period`;
+                else name = `Attendance Period ${idx + 1}`;
+              }
+              return {
+                date: gDate,
+                period_start: period_start || "",
+                period_end: period_end || "",
+                rows,
+                name,
+                custom_name,
+              };
+            });
+            setAttendanceGroups(normalized);
+          } catch (err) {
+            console.error("Error parsing attendance data:", err);
+            setAttendanceGroups([]);
+          }
+        } else {
+          // No attendance data: ensure at least one default group if date exists
+          if (data.date) {
+            setAttendanceGroups([
+              {
+                date: data.date,
+                period_start: "",
+                period_end: "",
+                rows: [
+                  { process: "In", start_time: "", cutoff: "" },
+                  { process: "Out", start_time: "", cutoff: "" },
+                ],
+                name: "Attendance Period 1",
+                custom_name: false,
+              },
+            ]);
+          } else {
+            setAttendanceGroups([]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching event details:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch approval history
+  const fetchApprovalHistory = async () => {
+    if (!id) return;
+    try {
+      const response = await fetch(`${ip}/fetch-approval-history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "Event", relating_id: id }),
+      });
+      if (!response.ok) throw new Error("Failed to fetch approval history");
+      const result = await response.json();
+      if (result.status) {
+        setApprovalHistory(result.data);
+        setApprovalHistoryError("");
+      } else {
+        setApprovalHistory([]);
+        setApprovalHistoryError(
+          result.error || "Failed to fetch approval history"
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching approval history:", error);
+      setApprovalHistory([]);
+      setApprovalHistoryError("Error fetching approval history");
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -64,7 +240,10 @@ export default function EditDraftEventModal({
       setEventDate("");
       setStartTime("");
       setEndTime("");
+      setAttendanceGroups([]);
+      setIsEditingDetails(false);
       setErrorMsg("");
+      setShowDelete(false);
       setShowRequestModal(false);
       setRequestMessage("");
       setRequestError("");
@@ -76,10 +255,24 @@ export default function EditDraftEventModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (errorMsg && errorRef.current) {
-      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (isOpen) {
+      fetchDraftDetails();
+      fetchApprovalHistory();
     }
-  }, [errorMsg]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, id, ip]);
+
+  // Check for validation errors after details are loaded
+  useEffect(() => {
+    if (details && attendanceGroups.length > 0) {
+      // Run validation checks and display errors if any
+      const errorMsg = getValidationErrorMessage();
+      if (errorMsg) {
+        setErrorMsg(errorMsg);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -91,178 +284,25 @@ export default function EditDraftEventModal({
     setIsVisible(isOpen);
   }, [isOpen]);
 
+  // Clear global error message if there are any attendance period or row errors
   useEffect(() => {
-    if (eventDate) {
-      let groups = [];
-      groups.push({
-        date: eventDate,
-        period_start: "",
-        period_end: "",
-        rows: [
-          { process: "In", start_time: "", cutoff: "" },
-          { process: "Out", start_time: "", cutoff: "" },
-        ],
-        name: "Attendance Period 1",
-        custom_name: false,
-      });
-      setAttendanceGroups(groups);
+    const hasAttendanceErrors = attendanceGroups.some((group) => {
+      if (group.periodError) return true;
+      if (group.rows && group.rows.some((row) => row.rowError)) return true;
+      return false;
+    });
+
+    if (hasAttendanceErrors) {
       setErrorMsg("");
     }
-  }, [eventDate]);
+  }, [attendanceGroups]);
 
+  // Check if form is ready to submit (no validation errors)
   useEffect(() => {
-    setLoading(true);
-    async function fetchDetails() {
-      if (!id) return;
-      try {
-        const response = await fetch(`${ip}/fetch-draft-event-details`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        });
-        if (!response.ok) throw new Error("Failed to fetch details");
-        const result = await response.json();
-        console.log("Fetched event details:", result);
-        if (result.status) {
-          const data = result.data;
-          setDetails(data);
-          setEventName(data.name || "");
-          setEventDescription(data.description || "");
-          setEventDate(data.date ? formatDateForInput(data.date) : "");
-
-          // Parse time_period if provided (format: "HH:MM-HH:MM"), otherwise use start_time/end_time
-          if (data.time_period) {
-            const [start, end] = data.time_period
-              .split("-")
-              .map((t) => t.trim());
-            setStartTime(start || "");
-            setEndTime(end || "");
-          } else {
-            setStartTime(data.start_time || "");
-            setEndTime(data.end_time || "");
-          }
-
-          // Parse attendances or breakdown JSON
-          const attendanceData = data.attendances || data.breakdown;
-          if (attendanceData) {
-            try {
-              const parsedAttendance =
-                typeof attendanceData === "string"
-                  ? JSON.parse(attendanceData)
-                  : attendanceData;
-              // Normalize attendance structure to: { date, period_start, period_end, rows: [{process, start_time, cutoff}] }
-              const normalized = parsedAttendance.map((group, idx) => {
-                const gDate = group.date || data.date || eventDate || today;
-                // rows may be in old shape (time, cutoff, process) or new shape
-                const rawRows = group.rows || [];
-                const rows = rawRows.map((r) => {
-                  if (r.start_time !== undefined) {
-                    return {
-                      process: r.process || "",
-                      start_time: r.start_time || "",
-                      cutoff: r.cutoff || "",
-                    };
-                  }
-                  // old format
-                  return {
-                    process: r.process || "",
-                    start_time: r.time || "",
-                    cutoff: r.cutoff || "",
-                  };
-                });
-
-                // Ensure In and Out exist
-                if (rows.length === 0) {
-                  rows.push({ process: "In", start_time: "", cutoff: "" });
-                  rows.push({ process: "Out", start_time: "", cutoff: "" });
-                } else {
-                  if (rows[0].process !== "In") {
-                    rows.unshift({ process: "In", start_time: "", cutoff: "" });
-                  }
-                  if (rows[rows.length - 1].process !== "Out") {
-                    rows.push({ process: "Out", start_time: "", cutoff: "" });
-                  }
-                }
-
-                // derive period bounds if not provided
-                let period_start = group.period_start || "";
-                let period_end = group.period_end || "";
-                const times = rows.map((r) => r.start_time).filter(Boolean);
-                if (!period_start && times.length)
-                  period_start = times.reduce((a, b) => (a < b ? a : b));
-                if (!period_end && times.length)
-                  period_end = times.reduce((a, b) => (a > b ? a : b));
-
-                // determine name and whether it was customized
-                let name = group.name || "";
-                let custom_name = !!group.name;
-                if (!name) {
-                  // if times present, derive a period-based default name
-                  const label =
-                    getPeriodFromTime(period_start) ||
-                    getPeriodFromTime(period_end);
-                  if (label) {
-                    name = `${label} Attendance Period`;
-                  } else {
-                    name = `Attendance Period ${idx + 1}`;
-                  }
-                }
-
-                return {
-                  date: gDate,
-                  period_start: period_start || "",
-                  period_end: period_end || "",
-                  rows,
-                  name,
-                  custom_name,
-                };
-              });
-              setAttendanceGroups(normalized);
-            } catch (err) {
-              console.error("Error parsing attendance data:", err);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching event details:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    async function fetchApprovalHistory() {
-      if (!id) return;
-      try {
-        const response = await fetch(`${ip}/fetch-approval-history`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "Event", relating_id: id }),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch approval history");
-        }
-        const result = await response.json();
-        if (result.status) {
-          setApprovalHistory(result.data);
-          setApprovalHistoryError("");
-        } else {
-          setApprovalHistory([]);
-          setApprovalHistoryError(
-            result.error || "Failed to fetch approval history"
-          );
-        }
-      } catch (error) {
-        console.error("Error fetching approval history:", error);
-        setApprovalHistory([]);
-        setApprovalHistoryError("Error fetching approval history");
-      }
-    }
-
-    if (isOpen) {
-      fetchDetails();
-      fetchApprovalHistory();
-    }
-  }, [isOpen, id, ip]);
+    const isReady = !hasValidationErrors();
+    setReadyToSubmit(isReady);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceGroups, eventDate, startTime, endTime]);
 
   const handleKeyDown = (e, nextFocusFn) => {
     if (e.key === "Enter") {
@@ -279,31 +319,50 @@ export default function EditDraftEventModal({
 
   // Ensure end time is not before start time when updating either field
   const handleStartTimeChange = (value) => {
-    setStartTime(value);
     // If an endTime exists, ensure it's not before the new start
     if (endTime && value && endTime < value) {
       setErrorMsg("End time must not be before start time.");
+      // Don't update start time if it makes end time invalid
       return;
     }
+    setStartTime(value);
     // clear any related error and persist draft
     setErrorMsg("");
-    if (typeof updateEvent === "function") updateEvent("Draft");
+    if (typeof updateEvent === "function") {
+      updateEvent("Draft", {
+        eventName,
+        eventDescription,
+        eventDate,
+        startTime: value,
+        endTime,
+        attendanceGroups,
+      });
+    }
 
     // Validate existing attendance periods against the new event time
     if (value && endTime && eventDate) {
-      const eventStart = new Date(`${eventDate}T${value}:00`);
-      const eventEnd = new Date(`${eventDate}T${endTime}:00`);
+      // Compare times as minutes to avoid date/timezone issues
+      const eventStartMin = timeToMinutes(value);
+      const eventEndMin = timeToMinutes(endTime);
+
       setAttendanceGroups((prev) =>
-        prev.map((g, i) => {
+        prev.map((g) => {
           if (!g.period_start || !g.period_end)
             return { ...g, periodError: g.periodError || "" };
-          const gDate = g.date || eventDate;
-          const pStart = new Date(`${gDate}T${g.period_start}:00`);
-          const pEnd = new Date(`${gDate}T${g.period_end}:00`);
-          if (pStart < eventStart || pEnd > eventEnd) {
-            const name = computeAttendanceGroupName(g, i);
-            const msg = `Attendance period "${name}" (${g.period_start} - ${g.period_end}) is outside the event time range (${value} - ${endTime}).`;
-            return { ...g, periodError: msg };
+
+          const pStartMin = timeToMinutes(g.period_start);
+          const pEndMin = timeToMinutes(g.period_end);
+
+          if (
+            pStartMin !== null &&
+            pEndMin !== null &&
+            eventStartMin !== null &&
+            eventEndMin !== null
+          ) {
+            if (pStartMin < eventStartMin || pEndMin > eventEndMin) {
+              const msg = `Attendance periods must be within the event time range.`;
+              return { ...g, periodError: msg };
+            }
           }
           return { ...g, periodError: "" };
         })
@@ -314,30 +373,49 @@ export default function EditDraftEventModal({
   };
 
   const handleEndTimeChange = (value) => {
-    setEndTime(value);
     // If a startTime exists, ensure end is not before start
     if (startTime && value && value < startTime) {
       setErrorMsg("End time must not be before start time.");
+      // Don't update end time if it makes it before start time
       return;
     }
+    setEndTime(value);
     setErrorMsg("");
-    if (typeof updateEvent === "function") updateEvent("Draft");
+    if (typeof updateEvent === "function") {
+      updateEvent("Draft", {
+        eventName,
+        eventDescription,
+        eventDate,
+        startTime,
+        endTime: value,
+        attendanceGroups,
+      });
+    }
 
     // Validate existing attendance periods against the new event time
     if (startTime && value && eventDate) {
-      const eventStart = new Date(`${eventDate}T${startTime}:00`);
-      const eventEnd = new Date(`${eventDate}T${value}:00`);
+      // Compare times as minutes to avoid date/timezone issues
+      const eventStartMin = timeToMinutes(startTime);
+      const eventEndMin = timeToMinutes(value);
+
       setAttendanceGroups((prev) =>
-        prev.map((g, i) => {
+        prev.map((g) => {
           if (!g.period_start || !g.period_end)
             return { ...g, periodError: g.periodError || "" };
-          const gDate = g.date || eventDate;
-          const pStart = new Date(`${gDate}T${g.period_start}:00`);
-          const pEnd = new Date(`${gDate}T${g.period_end}:00`);
-          if (pStart < eventStart || pEnd > eventEnd) {
-            const name = computeAttendanceGroupName(g, i);
-            const msg = `Attendance period "${name}" (${g.period_start} - ${g.period_end}) is outside the event time range (${startTime} - ${value}).`;
-            return { ...g, periodError: msg };
+
+          const pStartMin = timeToMinutes(g.period_start);
+          const pEndMin = timeToMinutes(g.period_end);
+
+          if (
+            pStartMin !== null &&
+            pEndMin !== null &&
+            eventStartMin !== null &&
+            eventEndMin !== null
+          ) {
+            if (pStartMin < eventStartMin || pEndMin > eventEndMin) {
+              const msg = `Attendance periods must be within the event time range.`;
+              return { ...g, periodError: msg };
+            }
           }
           return { ...g, periodError: "" };
         })
@@ -455,52 +533,91 @@ export default function EditDraftEventModal({
       const updated = JSON.parse(JSON.stringify(prev));
       // Update row fields (process, start_time, cutoff)
       if (field === "start_time" || field === "cutoff" || field === "process") {
-        updated[groupIdx].rows[rowIdx][field] = value;
-        // perform per-row validation
         const row = updated[groupIdx].rows[rowIdx];
-        // clear previous row error
-        row.rowError = "";
         const ps = updated[groupIdx].period_start;
         const pe = updated[groupIdx].period_end;
 
-        // If period bounds exist, ensure row start is within them
-        if (row.start_time && ps && pe) {
-          const startMin = timeToMinutes(row.start_time);
-          const periodStartMin = timeToMinutes(ps);
-          const periodEndMin = timeToMinutes(pe);
-          if (
-            startMin === null ||
-            periodStartMin === null ||
-            periodEndMin === null
-          ) {
-            row.rowError = "Invalid time format.";
-          } else if (startMin < periodStartMin || startMin > periodEndMin) {
-            row.rowError =
-              "Process start time must be within the attendance period.";
-          }
-        }
+        // Clear previous row error
+        row.rowError = "";
 
-        // If both times present, ensure cutoff is at least 10 minutes after start
-        if (row.start_time && row.cutoff) {
-          const sMin = timeToMinutes(row.start_time);
-          const cMin = timeToMinutes(row.cutoff);
-          if (sMin === null || cMin === null) {
-            row.rowError = "Invalid time format.";
-          } else if (cMin - sMin < 10) {
-            row.rowError =
-              "Cutoff must be at least 10 minutes after the start time.";
+        // Special handling for start_time and cutoff fields to validate and reset on error
+        if (field === "start_time") {
+          // Validate start_time is within period bounds
+          if (value && ps && pe) {
+            const startMin = timeToMinutes(value);
+            const periodStartMin = timeToMinutes(ps);
+            const periodEndMin = timeToMinutes(pe);
+            if (
+              startMin === null ||
+              periodStartMin === null ||
+              periodEndMin === null
+            ) {
+              row.rowError = "Invalid time format.";
+              row.start_time = ""; // Reset invalid input
+              return updated;
+            } else if (startMin < periodStartMin || startMin > periodEndMin) {
+              row.rowError = "Start time must be within the attendance period.";
+              row.start_time = ""; // Reset invalid input
+              return updated;
+            }
           }
+          row.start_time = value;
+
+          // If cutoff also exists, check if new start_time makes cutoff invalid
+          if (row.cutoff) {
+            const sMin = timeToMinutes(value);
+            const cMin = timeToMinutes(row.cutoff);
+            if (sMin !== null && cMin !== null && cMin - sMin < 10) {
+              row.rowError =
+                "Cutoff must be at least 10 minutes after the start time.";
+              row.cutoff = ""; // Reset cutoff to blank
+            }
+          }
+        } else if (field === "cutoff") {
+          // Validate cutoff is within period bounds
+          if (value && ps && pe) {
+            const cutoffMin = timeToMinutes(value);
+            const periodStartMin = timeToMinutes(ps);
+            const periodEndMin = timeToMinutes(pe);
+            if (
+              cutoffMin === null ||
+              periodStartMin === null ||
+              periodEndMin === null
+            ) {
+              row.rowError = "Invalid time format.";
+              row.cutoff = ""; // Reset invalid input
+              return updated;
+            } else if (cutoffMin < periodStartMin || cutoffMin > periodEndMin) {
+              row.rowError = "Cutoff must be within the attendance period.";
+              row.cutoff = ""; // Reset invalid input
+              return updated;
+            }
+          }
+          row.cutoff = value;
+
+          // If start_time exists, check if new cutoff is at least 10 minutes after start
+          if (row.start_time) {
+            const sMin = timeToMinutes(row.start_time);
+            const cMin = timeToMinutes(value);
+            if (sMin !== null && cMin !== null && cMin - sMin < 10) {
+              row.rowError =
+                "Cutoff must be at least 10 minutes after the start time.";
+              row.cutoff = ""; // Reset invalid input
+            }
+          }
+        } else if (field === "process") {
+          row.process = value;
         }
 
         // Extra checks for Surprise process
-        if (row.process === "Surprise") {
+        if (row.process === "Surprise" && row.start_time && row.cutoff) {
           const rows = updated[groupIdx].rows;
           const inRow = rows.find((r) => r.process === "In");
           const outRow = [...rows].reverse().find((r) => r.process === "Out");
           if (!inRow || !outRow || !inRow.cutoff || !outRow.start_time) {
             row.rowError =
               "Cannot set Surprise times: In cutoff or Out start time is missing.";
-          } else if (row.start_time && row.cutoff) {
+          } else {
             const inCut = timeToMinutes(inRow.cutoff);
             const outStart = timeToMinutes(outRow.start_time);
             const rStart = timeToMinutes(row.start_time);
@@ -515,9 +632,14 @@ export default function EditDraftEventModal({
             } else if (rStart < inCut || rCut > outStart) {
               row.rowError =
                 "Surprise times must be within In cutoff and Out start times.";
+              // Reset both times for Surprise if they're invalid
+              if (field === "start_time") row.start_time = "";
+              if (field === "cutoff") row.cutoff = "";
             } else if (rCut - rStart < 10) {
               row.rowError =
                 "Cutoff must be at least 10 minutes after the start time.";
+              // Reset cutoff if it's less than 10 minutes after start
+              if (field === "cutoff") row.cutoff = "";
             }
           }
         }
@@ -561,13 +683,17 @@ export default function EditDraftEventModal({
           // Check overlap against other groups
           const currentStart = new Date(`2000-01-01T${group.period_start}:00`);
           const currentEnd = new Date(`2000-01-01T${group.period_end}:00`);
-          // If this period's end is before its start, set per-group error and bail
+          // If this period's end is before its start, reset the invalid field
           if (currentEnd <= currentStart) {
             const msg =
               "Attendance period end time must not be before start time.";
             const updatedPrev = prev.map((g, idx) => {
               if (idx !== groupIdx) return { ...g };
-              return { ...g, periodError: msg };
+              // Reset the field that caused the error
+              const updated = { ...g, periodError: msg };
+              if (field === "period_start") updated.period_start = "";
+              if (field === "period_end") updated.period_end = "";
+              return updated;
             });
             setErrorMsg("");
             return updatedPrev;
@@ -589,7 +715,7 @@ export default function EditDraftEventModal({
             if (currentStart < otherEnd && currentEnd > otherStart) {
               const otherName = computeAttendanceGroupName(otherGroup, i);
               const currentName = computeAttendanceGroupName(group, groupIdx);
-              overlapError = `"${currentName}" overlaps with "${otherName}" (${otherGroup.period_start} - ${otherGroup.period_end}).`;
+              overlapError = `Attendance periods cannot overlap: "${currentName}" overlaps with "${otherName}".`;
               break;
             }
           }
@@ -597,24 +723,38 @@ export default function EditDraftEventModal({
           // Check against event-level time bounds (only when event times exist)
           let eventBoundError = null;
           if (startTime && endTime && eventDate) {
-            const eventStart = new Date(`${eventDate}T${startTime}:00`);
-            const eventEnd = new Date(`${eventDate}T${endTime}:00`);
-            const gDate = group.date || eventDate;
-            const pStart = new Date(`${gDate}T${group.period_start}:00`);
-            const pEnd = new Date(`${gDate}T${group.period_end}:00`);
-            if (pStart < eventStart || pEnd > eventEnd) {
-              const currentName = computeAttendanceGroupName(group, groupIdx);
-              eventBoundError = `Attendance period "${currentName}" (${group.period_start} - ${group.period_end}) is outside the event time range (${startTime} - ${endTime}).`;
+            // Compare times as minutes to avoid date/timezone issues
+            const pStartMin = timeToMinutes(group.period_start);
+            const pEndMin = timeToMinutes(group.period_end);
+            const eventStartMin = timeToMinutes(startTime);
+            const eventEndMin = timeToMinutes(endTime);
+
+            if (
+              pStartMin !== null &&
+              pEndMin !== null &&
+              eventStartMin !== null &&
+              eventEndMin !== null
+            ) {
+              // Check if period is OUTSIDE event bounds (period starts before event or ends after event)
+              if (pStartMin < eventStartMin || pEndMin > eventEndMin) {
+                eventBoundError = `Attendance periods must be within the event time range.`;
+              }
             }
           }
 
           // Build updated groups with per-group error set on the modified group
           const updatedPrev = prev.map((g, idx) => {
             if (idx !== groupIdx) return { ...g };
-            return {
+            const updated = {
               ...g,
               periodError: overlapError || eventBoundError || "",
             };
+            // If there's an error, reset the field that caused it
+            if (overlapError || eventBoundError) {
+              if (field === "period_start") updated.period_start = "";
+              if (field === "period_end") updated.period_end = "";
+            }
+            return updated;
           });
 
           // Also update global errorMsg to the first found message (keeps previous behavior)
@@ -697,8 +837,8 @@ export default function EditDraftEventModal({
       };
       return [...prev, newGroup];
     });
-    // persist draft after adding
-    updateEvent("Draft");
+    // persist draft after adding (use setTimeout to ensure state is updated)
+    setTimeout(() => updateEvent("Draft"), 0);
   };
 
   // ----- Remove an entire attendance period -----
@@ -709,7 +849,8 @@ export default function EditDraftEventModal({
       return;
     }
     setAttendanceGroups((prev) => prev.filter((_, i) => i !== groupIdx));
-    updateEvent("Draft");
+    // persist draft after removing (use setTimeout to ensure state is updated)
+    setTimeout(() => updateEvent("Draft"), 0);
   };
 
   // ----- Update the name of an attendance period (marks it as customized) -----
@@ -721,11 +862,17 @@ export default function EditDraftEventModal({
       updated[groupIdx].custom_name = value.trim() !== "";
       return updated;
     });
-    updateEvent("Draft");
+    // persist draft after updating (use setTimeout to ensure state is updated)
+    setTimeout(() => updateEvent("Draft"), 0);
+  };
+
+  // Helper to auto-save with setTimeout to allow state updates
+  const autoSaveDraft = () => {
+    setTimeout(() => updateEvent("Draft"), 0);
   };
 
   // ----- Auto-save draft event to backend -----
-  const updateEvent = async (status) => {
+  const updateEvent = async (status, overrideData = null) => {
     try {
       // Parse user data
       const userObj = userData ? JSON.parse(userData) : null;
@@ -733,6 +880,16 @@ export default function EditDraftEventModal({
         console.error("User data not found");
         return;
       }
+
+      // Use overridden data if provided (for handlers that need current values immediately)
+      const currentEventName = overrideData?.eventName ?? eventName;
+      const currentEventDescription =
+        overrideData?.eventDescription ?? eventDescription;
+      const currentEventDate = overrideData?.eventDate ?? eventDate;
+      const currentStartTime = overrideData?.startTime ?? startTime;
+      const currentEndTime = overrideData?.endTime ?? endTime;
+      const currentAttendanceGroups =
+        overrideData?.attendanceGroups ?? attendanceGroups;
 
       // If status is "Sent for Approval", validate first
       if (status === "Sent for Approval") {
@@ -743,7 +900,7 @@ export default function EditDraftEventModal({
       }
 
       // Serialize attendance groups to JSON
-      const attendancesData = attendanceGroups.map((group) => ({
+      const attendancesData = currentAttendanceGroups.map((group) => ({
         date: group.date,
         period_start: group.period_start,
         period_end: group.period_end,
@@ -758,17 +915,19 @@ export default function EditDraftEventModal({
 
       // Merge start and end times into time_period format
       const timePeriod =
-        startTime && endTime ? `${startTime}-${endTime}` : null;
+        currentStartTime && currentEndTime
+          ? `${currentStartTime}-${currentEndTime}`
+          : null;
 
       // Prepare request payload
       const payload = {
-        user_data: userObj,
+        user_data: JSON.stringify(userObj),
         id,
-        name: eventName,
-        description: eventDescription,
-        date: eventDate,
-        start_time: startTime || null,
-        end_time: endTime || null,
+        name: currentEventName,
+        description: currentEventDescription,
+        date: currentEventDate,
+        start_time: currentStartTime || null,
+        end_time: currentEndTime || null,
         time_period: timePeriod,
         status,
         attendances: attendancesData,
@@ -785,9 +944,14 @@ export default function EditDraftEventModal({
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Error updating event:", errorData);
-        setErrorMsg(
-          errorData.error || "Failed to update event. Please try again."
-        );
+        const errorMessage =
+          errorData.error || "Failed to update event. Please try again.";
+        handleShowNotification(errorMessage, "error");
+        if (status === "Sent for Approval") {
+          setShowRequestModal(false);
+          setRequestMessage("");
+          setRequestError("");
+        }
         return;
       }
 
@@ -799,23 +963,162 @@ export default function EditDraftEventModal({
             "Event submitted for approval successfully!",
             "success"
           );
+          setShowRequestModal(false);
+          setRequestMessage("");
+          setRequestError("");
+          // Close both modals and refresh global data
+          if (typeof onRefreshGlobalData === "function") {
+            onRefreshGlobalData();
+          }
+          if (typeof onClose === "function") {
+            onClose();
+          }
         } else if (status === "Draft") {
           handleShowNotification("Event saved successfully!", "success");
+          // Notify parent to refresh listing if provided
+          if (typeof refreshData === "function") refreshData();
         }
-        // Refresh data after successful update
-        refreshData();
       } else {
         console.error("Error updating event:", result.error);
-        setErrorMsg(
-          result.error || "Failed to update event. Please try again."
-        );
+        const errorMessage =
+          result.error || "Failed to update event. Please try again.";
+        handleShowNotification(errorMessage, "error");
+        if (status === "Sent for Approval") {
+          setShowRequestModal(false);
+          setRequestMessage("");
+          setRequestError("");
+        }
       }
     } catch (error) {
       console.error("Error updating event:", error);
-      setErrorMsg(
-        "An error occurred while updating the event. Please try again."
-      );
+      const errorMessage =
+        "An error occurred while updating the event. Please try again.";
+      handleShowNotification(errorMessage, "error");
+      if (status === "Sent for Approval") {
+        setShowRequestModal(false);
+        setRequestMessage("");
+        setRequestError("");
+      }
     }
+  };
+
+  // Get validation error message if any (returns null if no errors)
+  const getValidationErrorMessage = () => {
+    // Check if no attendance groups
+    if (!attendanceGroups || attendanceGroups.length === 0) {
+      return null;
+    }
+
+    // Validate each group's period and rows
+    for (let g = 0; g < attendanceGroups.length; g++) {
+      const group = attendanceGroups[g];
+      const { period_start, period_end, rows } = group;
+
+      if (!period_start || !period_end) {
+        return "Each attendance period requires a start and end time.";
+      }
+      if (period_start >= period_end) {
+        return "Attendance period start must be before end.";
+      }
+
+      // Ensure In and Out are present and at the ends
+      if (!rows || rows.length < 2) {
+        return "Each attendance period must have at least In and Out processes.";
+      }
+      if (rows[0].process !== "In" || rows[rows.length - 1].process !== "Out") {
+        return "Attendance processes must begin with In and end with Out.";
+      }
+
+      // Validate each row fields and that they are within the group's period
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row.process || !row.start_time || !row.cutoff) {
+          return "Please fill in all required fields in attendance groups.";
+        }
+        // start_time and cutoff must be within period bounds
+        if (row.start_time < period_start || row.start_time > period_end) {
+          return "Start time must be within the attendance period.";
+        }
+        if (row.cutoff < period_start || row.cutoff > period_end) {
+          return "Cutoff must be within the attendance period.";
+        }
+        // cutoff must be at least 10 minutes after start
+        const sMin = timeToMinutes(row.start_time);
+        const cMin = timeToMinutes(row.cutoff);
+        if (sMin === null || cMin === null || cMin - sMin < 10) {
+          return "Cutoff must be at least 10 minutes after the start time.";
+        }
+        // Surprise constraints
+        if (row.process === "Surprise") {
+          const inRow = rows.find((rr) => rr.process === "In");
+          const outRow = [...rows].reverse().find((rr) => rr.process === "Out");
+          if (!inRow || !outRow || !inRow.cutoff || !outRow.start_time) {
+            return "Surprise attendance requires In and Out attendance start and cutoff times to be set.";
+          }
+          const inCut = timeToMinutes(inRow.cutoff);
+          const outStart = timeToMinutes(outRow.start_time);
+          if (inCut === null || outStart === null) {
+            return "Invalid time format in In/Out rows.";
+          }
+          if (sMin < inCut || cMin > outStart) {
+            return "Surprise attendance must be within In and Out start times.";
+          }
+        }
+      }
+    }
+
+    // Ensure attendance periods do not overlap and are within event time (if set)
+    const parsedRanges = attendanceGroups.map((g) => ({
+      start: new Date(`${g.date}T${g.period_start}:00`),
+      end: new Date(`${g.date}T${g.period_end}:00`),
+    }));
+    // check overlaps
+    for (let i = 0; i < parsedRanges.length; i++) {
+      for (let j = i + 1; j < parsedRanges.length; j++) {
+        if (
+          parsedRanges[i].start < parsedRanges[j].end &&
+          parsedRanges[j].start < parsedRanges[i].end
+        ) {
+          const period1Name = computeAttendanceGroupName(
+            attendanceGroups[i],
+            i
+          );
+          const period2Name = computeAttendanceGroupName(
+            attendanceGroups[j],
+            j
+          );
+          return `Attendance periods cannot overlap: "${period1Name}" overlaps with "${period2Name}".`;
+        }
+      }
+    }
+
+    // check within event-level time if available
+    if (startTime && endTime) {
+      // Compare times as minutes to avoid date/timezone issues
+      const eventStartMin = timeToMinutes(startTime);
+      const eventEndMin = timeToMinutes(endTime);
+
+      if (eventStartMin !== null && eventEndMin !== null) {
+        for (let g of attendanceGroups) {
+          const pStartMin = timeToMinutes(g.period_start);
+          const pEndMin = timeToMinutes(g.period_end);
+
+          if (pStartMin !== null && pEndMin !== null) {
+            // Check if period is OUTSIDE event bounds
+            if (pStartMin < eventStartMin || pEndMin > eventEndMin) {
+              return "Attendance periods must be within the event time range.";
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  // Check for validation errors without setting error message (for ready-to-submit check)
+  const hasValidationErrors = () => {
+    return getValidationErrorMessage() !== null;
   };
 
   const validateForApproval = () => {
@@ -929,22 +1232,45 @@ export default function EditDraftEventModal({
 
     // check within event-level time if available
     if (startTime && endTime) {
-      const eventStart = new Date(`${eventDate}T${startTime}:00`);
-      const eventEnd = new Date(`${eventDate}T${endTime}:00`);
-      for (let pr of parsedRanges) {
-        if (pr.start < eventStart || pr.end > eventEnd) {
-          setErrorMsg(
-            "Attendance periods must be within the event time range."
-          );
-          return false;
+      // Compare times as minutes to avoid date/timezone issues
+      const eventStartMin = timeToMinutes(startTime);
+      const eventEndMin = timeToMinutes(endTime);
+
+      if (eventStartMin !== null && eventEndMin !== null) {
+        for (let g of attendanceGroups) {
+          const pStartMin = timeToMinutes(g.period_start);
+          const pEndMin = timeToMinutes(g.period_end);
+
+          if (pStartMin !== null && pEndMin !== null) {
+            // Check if period is OUTSIDE event bounds
+            if (pStartMin < eventStartMin || pEndMin > eventEndMin) {
+              setErrorMsg(
+                "Attendance periods must be within the event time range."
+              );
+              return false;
+            }
+          }
         }
       }
     }
 
+    // All validations passed, clear any previous error messages
+    setErrorMsg("");
     return true;
   };
+
   // If both start and end times are set, determine if the end is before the start
   const timeRangeInvalid = startTime && endTime && endTime < startTime;
+
+  // Check if event time range is at least one hour
+  const timeRangeLessThanOneHour = () => {
+    if (!startTime || !endTime) return false;
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
+    if (startMin === null || endMin === null) return false;
+    return endMin - startMin < 60; // less than 60 minutes
+  };
+  const isTimeRangeLessThanOneHour = timeRangeLessThanOneHour();
   if (!isOpen && !isVisible) return null;
   return (
     <>
@@ -1027,7 +1353,14 @@ export default function EditDraftEventModal({
                         type="button"
                         onClick={() => {
                           // Update details and exit edit mode
-                          updateEvent("Draft");
+                          updateEvent("Draft", {
+                            eventName,
+                            eventDescription,
+                            eventDate,
+                            startTime,
+                            endTime,
+                            attendanceGroups,
+                          });
                           setDetails((prev) => ({
                             ...prev,
                             name: eventName,
@@ -1035,7 +1368,7 @@ export default function EditDraftEventModal({
                           }));
                           setIsEditingDetails(false);
                         }}
-                        className="transition-all duration-150 transform hover:scale-105 hover:bg-blue-800 bg-blue-600 text-white px-3 py-1 rounded text-sm cursor-pointer"
+                        className="transition-all duration-150 transform hover:scale-105 hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer"
                       >
                         Save Details
                       </Button>
@@ -1047,7 +1380,7 @@ export default function EditDraftEventModal({
                           setEventDescription(details?.description || "");
                           setIsEditingDetails(false);
                         }}
-                        className="transition-all duration-150 transform hover:scale-105 hover:bg-gray-800 bg-gray-400 text-white px-3 py-1 rounded text-sm cursor-pointer"
+                        className="transition-all duration-150 transform hover:scale-105 hover:bg-gray-800 bg-gray-400 text-white px-4 py-2 rounded text-sm cursor-pointer"
                       >
                         Cancel
                       </Button>
@@ -1099,7 +1432,7 @@ export default function EditDraftEventModal({
                             value={eventDate}
                             onChange={(e) => {
                               setEventDate(e.target.value);
-                              updateEvent("Draft");
+                              autoSaveDraft();
                             }}
                             min={today}
                             className="w-full border rounded p-2 bg-white"
@@ -1222,7 +1555,7 @@ export default function EditDraftEventModal({
                   className="transition-all duration-150 transform hover:scale-105 hover:bg-purple-800 bg-purple-600 text-white px-4 py-2 rounded text-sm cursor-pointer flex flex-row lg:space-x-1"
                 >
                   <span>Submit </span>
-                  <span className="md:hidden lg:block">for Approval</span>
+                  <span className="md:hidden xl:block">for Approval</span>
                 </Button>
                 <Button
                   type="button"
@@ -1283,11 +1616,11 @@ export default function EditDraftEventModal({
           ) : (
             <div className="overflow-y-auto">
               <div className="pt-5 pb-5 md:pb-20 md:py-10 transition-all duration-300 px-5 sm:px-10 md:px-15 lg:px-20 xl:px-25 2xl:px-35">
-                {/* Budget Details Section */}
+                {/* Event Details Section */}
                 {isMobile && (
                   <div className="border-b border-gray-500 pb-4 mb-4">
                     <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Budget Details
+                      Event Details
                     </h2>
                     <motion.div
                       initial={{ opacity: 0.1, x: -4 }}
@@ -1298,7 +1631,7 @@ export default function EditDraftEventModal({
                     >
                       <div>
                         <label className="block font-semibold">
-                          Budget Name
+                          Event Name
                         </label>
                         <Input
                           value={eventName}
@@ -1328,7 +1661,7 @@ export default function EditDraftEventModal({
                           value={eventDate}
                           onChange={(e) => {
                             setEventDate(e.target.value);
-                            updateEvent("Draft");
+                            autoSaveDraft();
                           }}
                           min={today}
                           className="w-full border rounded p-2"
@@ -1364,18 +1697,22 @@ export default function EditDraftEventModal({
                           </div>
                         </div>
                       )}
-                      <div>
-                        <label className="flex font-semibold">
-                          Date Created
-                        </label>
-                        <div>{details.created_at}</div>
-                      </div>
-                      <div>
-                        <label className="flex font-semibold">
-                          Date Updated
-                        </label>
-                        <div>{details.updated_at}</div>
-                      </div>
+                      {details && (
+                        <>
+                          <div>
+                            <label className="flex font-semibold">
+                              Date Created
+                            </label>
+                            <div>{details.created_at}</div>
+                          </div>
+                          <div>
+                            <label className="flex font-semibold">
+                              Date Updated
+                            </label>
+                            <div>{details.updated_at}</div>
+                          </div>
+                        </>
+                      )}
                       <div className="mt-2">
                         <label className="flex font-semibold">
                           Approval History
@@ -1443,9 +1780,20 @@ export default function EditDraftEventModal({
                     Manage Attendances
                   </h2>
                   {/* If event date/time not fully set, hide attendance management and show message */}
-                  {!eventDate || !startTime || !endTime || timeRangeInvalid ? (
-                    <div className="p-4 rounded bg-yellow-50 border border-yellow-200 text-sm text-gray-700">
-                      {timeRangeInvalid ? (
+                  {!eventDate ||
+                  !startTime ||
+                  !endTime ||
+                  timeRangeInvalid ||
+                  isTimeRangeLessThanOneHour ? (
+                    <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-gray-700">
+                      {isTimeRangeLessThanOneHour ? (
+                        <>
+                          <span className="font-semibold text-red-600">
+                            Event time period must be at least 1 hour to manage
+                            attendance periods.
+                          </span>
+                        </>
+                      ) : timeRangeInvalid ? (
                         <>
                           <span className="font-semibold text-red-600">
                             Error:
@@ -1493,15 +1841,17 @@ export default function EditDraftEventModal({
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <Button
-                                type="button"
-                                onClick={() => {
-                                  removeAttendancePeriod(gIdx);
-                                }}
-                                className="bg-red-500 text-white px-2 py-1 rounded text-sm"
-                              >
-                                Remove Period
-                              </Button>
+                              {attendanceGroups.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    removeAttendancePeriod(gIdx);
+                                  }}
+                                  className="bg-red-500 text-white px-2 py-1 rounded text-sm"
+                                >
+                                  Remove Period
+                                </Button>
+                              )}
                             </div>
                           </div>
                           {/* Attendance period bounds */}
@@ -1520,7 +1870,7 @@ export default function EditDraftEventModal({
                                     "period_start",
                                     e.target.value
                                   );
-                                  updateEvent("Draft");
+                                  autoSaveDraft();
                                 }}
                                 className="w-40"
                               />
@@ -1539,15 +1889,17 @@ export default function EditDraftEventModal({
                                     "period_end",
                                     e.target.value
                                   );
-                                  updateEvent("Draft");
+                                  autoSaveDraft();
                                 }}
                                 className="w-40"
                               />
                             </div>
                           </div>
                           {group.periodError && (
-                            <div className="mt-2 text-sm text-red-600">
-                              {group.periodError}
+                            <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-gray-700 mt-2">
+                              <span className="font-semibold text-red-600">
+                                {group.periodError}
+                              </span>
                             </div>
                           )}
 
@@ -1583,7 +1935,7 @@ export default function EditDraftEventModal({
                                               "process",
                                               e.target.value
                                             );
-                                            updateEvent("Draft");
+                                            autoSaveDraft();
                                           }}
                                           className="w-32 border rounded p-1 text-sm"
                                           disabled={
@@ -1603,7 +1955,7 @@ export default function EditDraftEventModal({
                                               "start_time",
                                               e.target.value
                                             );
-                                            updateEvent("Draft");
+                                            autoSaveDraft();
                                           }}
                                           className="w-full"
                                         />
@@ -1619,7 +1971,7 @@ export default function EditDraftEventModal({
                                               "cutoff",
                                               e.target.value
                                             );
-                                            updateEvent("Draft");
+                                            autoSaveDraft();
                                           }}
                                           className="w-full"
                                         />
@@ -1633,7 +1985,7 @@ export default function EditDraftEventModal({
                                                 gIdx,
                                                 rIdx
                                               );
-                                              updateEvent("Draft");
+                                              autoSaveDraft();
                                             }}
                                             className="bg-red-500 text-white px-2 py-1 rounded text-xs"
                                           >
@@ -1647,11 +1999,12 @@ export default function EditDraftEventModal({
                                         key={`err-${gIdx}-${rIdx}`}
                                         className="bg-white"
                                       >
-                                        <td
-                                          colSpan="4"
-                                          className="p-2 text-sm text-red-600"
-                                        >
-                                          {row.rowError}
+                                        <td colSpan="4" className="p-2">
+                                          <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-gray-700">
+                                            <span className="font-semibold text-red-600">
+                                              {row.rowError}
+                                            </span>
+                                          </div>
                                         </td>
                                       </tr>
                                     ) : null,
@@ -1667,11 +2020,11 @@ export default function EditDraftEventModal({
                                         type="button"
                                         onClick={() => {
                                           addRowToAttendanceGroup(gIdx);
-                                          updateEvent("Draft");
+                                          autoSaveDraft();
                                         }}
                                         className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
                                       >
-                                        Add Surprise Process
+                                        Add Surprise Attendance
                                       </Button>
                                     </td>
                                   </tr>
@@ -1696,9 +2049,21 @@ export default function EditDraftEventModal({
                   )}
                 </div>
                 {errorMsg && (
-                  <p ref={errorRef} className="mt-8 text-red-600 text-sm">
-                    {errorMsg}
-                  </p>
+                  <div
+                    ref={errorRef}
+                    className="mt-8 p-4 rounded bg-red-50 border border-red-200 text-sm text-gray-700"
+                  >
+                    <span className="font-semibold text-red-600">
+                      {errorMsg}
+                    </span>
+                  </div>
+                )}
+                {readyToSubmit && !errorMsg && (
+                  <div className="mt-8 p-4 rounded bg-green-50 border border-green-200 text-sm text-gray-700">
+                    <span className="font-semibold text-green-600">
+                      ✓ Event is ready to submit for approval
+                    </span>
+                  </div>
                 )}
               </div>
             </div>

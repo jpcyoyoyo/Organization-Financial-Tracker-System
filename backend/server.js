@@ -6,6 +6,10 @@ const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
 const fs = require("fs");
 const multer = require("multer");
+const { v4: uuidv4 } = require("uuid");
+const sessionManager = require("./session-manager");
+const http = require("http");
+const socketIO = require("socket.io");
 require("dotenv").config();
 
 const app = express();
@@ -13,18 +17,20 @@ app.use(morgan("dev"));
 app.use(cors());
 app.use(express.json());
 
+// Initialize Socket.IO with CORS
+const server = http.createServer(app);
+const io = socketIO(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
 const oms_db = mysql.createConnection({
   host: "localhost",
   user: "root",
   password: "",
   database: "oms_db",
-});
-
-const sets_db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "expense_tracker",
 });
 
 // ---- Functions ---- //
@@ -103,6 +109,7 @@ function logActivity({
   status = 0,
   summary = "",
   details = "",
+  emitStatsUpdate = false, // Control whether to emit stats-updated event
 }) {
   return new Promise((resolve, reject) => {
     const sql = `
@@ -125,11 +132,45 @@ function logActivity({
         reject(err);
       } else {
         console.log("Activity logged successfully:", result.insertId);
+
+        // 🔹 Only broadcast stats-updated if explicitly enabled
+        // This prevents excessive event emissions from routine logging
+        if (emitStatsUpdate) {
+          io.emit("stats-updated", {
+            event: "log-added",
+            logId: result.insertId,
+            userId: user_id,
+            tab: tab,
+            timestamp: Date.now(),
+          });
+
+          console.log(
+            `[Socket.IO] Broadcasting stats-updated event for new log (${tab})`
+          );
+        }
+
         resolve(result.insertId);
       }
     });
   });
 }
+
+app.get("/api/config", (req, res) => {
+  const os = require("os");
+  const interfaces = os.networkInterfaces();
+  let ipAddress = "localhost";
+
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        ipAddress = iface.address;
+        break;
+      }
+    }
+  }
+
+  res.json({ ipAddress });
+});
 
 // 🔹 Login Route (Fixed bcrypt compatibility)
 app.post("/login", async (req, res) => {
@@ -300,6 +341,27 @@ app.post("/login", async (req, res) => {
           `User login status updated successfully.\n\n\t- User ID: ${user.id}\n\t- Platform: ${platform}`
         ),
       });
+
+      // 🔹 Broadcast user-joined event via Socket.IO only for non-admin users
+      if (user.designation !== "Admin") {
+        io.to("online-users").emit("user-joined", {
+          userId: user.id,
+          platform: platform,
+          timestamp: Date.now(),
+        });
+
+        // 🔹 Broadcast stats-updated for online cards
+        io.emit("stats-updated", {
+          event: "user-login",
+          userId: user.id,
+          platform: platform,
+          timestamp: Date.now(),
+        });
+
+        console.log(
+          `[Socket.IO] Broadcasting user-joined and stats-updated events for user ${user.id} (${user.full_name}) on ${platform}`
+        );
+      }
     });
 
     // 🔹 Generate JWT Token
@@ -323,7 +385,11 @@ app.post("/login", async (req, res) => {
       ),
     });
 
-    return res.json({ message: "Login successful", user, token });
+    // 🔹 Start server-side session tracking
+    const sessionId = uuidv4();
+    sessionManager.registerSession(sessionId, user.id, platform);
+
+    return res.json({ message: "Login successful", user, token, sessionId });
   });
 });
 
@@ -334,8 +400,19 @@ app.post("/fetch-your-payments", async (req, res) => {
     return res.status(400).json({ error: "User Data are required" });
   }
 
-  const sql =
-    "SELECT p.* FROM payment p LEFT JOIN collection c ON p.id = c.payment_id WHERE c.payment_id IS NULL AND p.user_id = ?;";
+  // Fetch all payments that don't have corresponding collections for this user
+  // Only include payments with "Issued" status
+  const sql = `
+    SELECT p.* 
+    FROM payment p
+    WHERE p.status = 'Issued'
+    AND p.id NOT IN (
+      SELECT DISTINCT c.payment_id 
+      FROM collection c 
+      WHERE c.payer_student_id = ?
+    )
+    ORDER BY p.due_date DESC;
+  `;
 
   oms_db.query(sql, [id], (err, results) => {
     if (err) {
@@ -343,7 +420,56 @@ app.post("/fetch-your-payments", async (req, res) => {
       return res.status(500).json({ error: "Internal Server Error" });
     }
 
-    return res.json({ status: true, fetch: results });
+    // Check if user has payments
+    if (!results || results.length === 0) {
+      return res.json({
+        status: true,
+        users: [],
+        message: "No outstanding payments found",
+      });
+    }
+
+    // Format the results with due date and color status
+    const formattedResults = results.map((payment) => {
+      const dueDate = new Date(payment.due_date);
+      const now = new Date();
+
+      // Format due_date as dd/mm/yyyy hh:mm AM/PM
+      const day = String(dueDate.getDate()).padStart(2, "0");
+      const month = String(dueDate.getMonth() + 1).padStart(2, "0");
+      const year = dueDate.getFullYear();
+      let hours = dueDate.getHours();
+      const minutes = String(dueDate.getMinutes()).padStart(2, "0");
+      const ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12;
+      hours = hours ? hours : 12; // convert 0 to 12
+      const formattedHours = String(hours).padStart(2, "0");
+      const formattedDueDate = `${day}/${month}/${year} at ${formattedHours}:${minutes} ${ampm}`;
+
+      // Format amount with peso sign
+      const formattedAmount = `₱${parseFloat(payment.amount).toFixed(2)}`;
+
+      // Determine color based on due date
+      let dueDateColor = "text-green-600"; // Default: green (not yet due or more than 1 day away)
+      const diffTime = dueDate - now;
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+      if (diffDays < 0) {
+        dueDateColor = "text-red-600"; // Red: overdue
+      } else if (diffDays <= 1) {
+        dueDateColor = "text-yellow-600"; // Yellow: within 1 day
+      }
+
+      return {
+        ...payment,
+        name: payment.name,
+        amount: formattedAmount,
+        date_due: formattedDueDate,
+        dueDateColor: dueDateColor,
+      };
+    });
+
+    return res.json({ status: true, users: formattedResults });
   });
 });
 
@@ -380,6 +506,7 @@ app.post("/fetch-users", async (req, res) => {
   FROM user_account ua 
   LEFT JOIN section s ON ua.section_id = s.id
   WHERE ua.designation != 'Admin'
+  
   `;
   let params = [];
 
@@ -427,6 +554,16 @@ app.post("/fetch-users", async (req, res) => {
       console.error("Database error:", err);
       return res.status(500).json({ error: "Internal Server Error" });
     }
+
+    // Sort results: online users first, then by latest update
+    results.sort((a, b) => {
+      // First, sort by is_online (1 = online at top, 0 = offline at bottom)
+      if (a.is_online !== b.is_online) {
+        return b.is_online - a.is_online;
+      }
+      // Then, sort by updated_at (latest first)
+      return new Date(b.updated_at) - new Date(a.updated_at);
+    });
 
     return res.json({ status: true, data: results });
   });
@@ -571,6 +708,17 @@ app.post("/create-account", async (req, res) => {
                         .status(500)
                         .json({ status: false, error: "Error updating user" });
                     }
+                    
+                    // 🔹 Broadcast account-created event via Socket.IO
+                    io.emit("account-updated", {
+                      event: "created",
+                      userId: user_id,
+                      timestamp: Date.now(),
+                    });
+                    console.log(
+                      `[Socket.IO] Broadcasting account-created event for user ${user_id}`
+                    );
+
                     return res.json({ status: true, user_id });
                   }
                 );
@@ -941,6 +1089,30 @@ app.post("/update-account", async (req, res) => {
       ];
     }
 
+    // Check if user's current designation is Representative and is being changed to something else
+    const currentUserSql = "SELECT designation FROM user_account WHERE id = ?";
+    const currentUser = await new Promise((resolve, reject) => {
+      oms_db.query(currentUserSql, [id], (err, results) => {
+        if (err) reject(err);
+        else resolve(results[0]);
+      });
+    });
+
+    if (
+      currentUser &&
+      currentUser.designation === "Representative" &&
+      designation !== "Representative"
+    ) {
+      // Clear the representative field in the section record
+      await new Promise((resolve, reject) => {
+        oms_db.query(
+          "UPDATE section SET representative = NULL WHERE representative = ?",
+          [id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+    }
+
     // Handle unique roles first
     if (uniqueRoles.includes(designation)) {
       await new Promise((resolve, reject) => {
@@ -1029,6 +1201,17 @@ app.post("/delete-account", (req, res) => {
     if (result.affectedRows === 0) {
       return res.json({ status: false, error: "User not found" });
     }
+
+    // 🔹 Broadcast account-deleted event via Socket.IO
+    io.emit("account-updated", {
+      event: "deleted",
+      userId: id,
+      timestamp: Date.now(),
+    });
+    console.log(
+      `[Socket.IO] Broadcasting account-deleted event for user ${id}`
+    );
+
     return res.json({ status: true });
   });
 });
@@ -1319,7 +1502,8 @@ app.post("/fetch-section-details", (req, res) => {
       s.year,
       s.name,
       s.student_no,
-      ua.full_name AS representative_full_name
+      ua.full_name AS representative_full_name,
+      ua.profile_pic AS representative_profile_pic
     FROM section s
     LEFT JOIN user_account ua ON s.representative = ua.id
     WHERE s.id = ?`;
@@ -1337,7 +1521,31 @@ app.post("/fetch-section-details", (req, res) => {
     const data = results[0];
     data.created_at = formatDate(data.created_at);
     data.updated_at = formatDate(data.updated_at);
-    return res.json({ status: true, data: results[0] });
+
+    if (data.representative_profile_pic === null) {
+      data.representative_profile_pic = "src/assets/profile_default.svg";
+    }
+
+    // Fetch enrolled users for this section
+    const usersSql = `
+      SELECT 
+        profile_pic,
+        student_id,
+        full_name,
+        designation
+      FROM user_account
+      WHERE section_id = ? AND designation != 'Admin' AND status = 'Continuing'
+      ORDER BY full_name ASC`;
+
+    oms_db.query(usersSql, [id], (userErr, usersResults) => {
+      if (userErr) {
+        console.error("Error fetching users:", userErr);
+        data.enrolled_users = [];
+      } else {
+        data.enrolled_users = usersResults || [];
+      }
+      return res.json({ status: true, data });
+    });
   });
 });
 
@@ -1506,6 +1714,100 @@ app.post("/fetch-online-mobile", (req, res) => {
     });
 
     return res.json({ status: true, data: result[0] });
+  });
+});
+
+// ============================================================================
+// ENDPOINT: Fetch Currently Online Users (with profile pic, student_id, name, platform)
+// ============================================================================
+app.post("/fetch-currently-online", (req, res) => {
+  const { id } = req.body;
+
+  // Log the process
+  logActivity({
+    user_id: id || null,
+    tab: "Admin Dashboard",
+    activity: "Fetch Dashboard Data Attempt",
+    status: 2, // Process
+    summary: "Fetching currently online users...",
+    details:
+      "The system is attempting to fetch list of currently online users for Admin Dashboard.",
+  }).catch((err) => {
+    console.error("Failed to log process activity:", err);
+  });
+
+  // Query to get online users with their details
+  // Build platform string based on web/mobile status
+  const sql = `
+    SELECT 
+      u.id,
+      u.profile_pic,
+      u.student_id,
+      u.full_name,
+      CASE 
+        WHEN u.is_login_web = 1 AND u.is_login_mobile = 1 THEN 'Web & Mobile'
+        WHEN u.is_login_web = 1 THEN 'Web'
+        WHEN u.is_login_mobile = 1 THEN 'Mobile'
+        ELSE 'Unknown'
+      END AS platform,
+      u.is_online,
+      u.is_login_web,
+      u.is_login_mobile,
+      u.updated_at
+    FROM user_account u
+    WHERE u.is_online = 1 
+      AND u.designation <> 'Admin'
+    ORDER BY u.updated_at DESC
+  `;
+
+  oms_db.query(sql, [], (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+
+      // Log the failure
+      logActivity({
+        user_id: id || null,
+        tab: "Admin Dashboard",
+        activity: "Fetch Dashboard Data Attempt",
+        status: 1, // Failed
+        summary: "Failed to fetch currently online users",
+        details: `An error occurred while fetching online users.\n\nError: ${err}`,
+      }).catch((logErr) => {
+        console.error("Failed to log failed activity:", logErr);
+      });
+
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format the results for frontend
+    const formattedResults = results.map((user) => ({
+      id: user.id,
+      profile_pic: user.profile_pic,
+      student_id: user.student_id,
+      full_name: user.full_name,
+      name: user.full_name, // Alias for compatibility
+      platform: user.platform,
+      is_online: user.is_online,
+      is_login_web: user.is_login_web,
+      is_login_mobile: user.is_login_mobile,
+      updated_at: user.updated_at,
+    }));
+
+    // Log the success
+    logActivity({
+      user_id: id || null,
+      tab: "Admin Dashboard",
+      activity: "Fetch Dashboard Data Attempt",
+      status: 0, // Success
+      summary: "Successfully fetched currently online users",
+      details: `The system successfully fetched ${results.length} online users for Admin Dashboard.`,
+    }).catch((logErr) => {
+      console.error("Failed to log success activity:", logErr);
+    });
+
+    return res.json({ status: true, data: formattedResults });
   });
 });
 
@@ -1867,9 +2169,133 @@ app.post("/logout", async (req, res) => {
       details: String(`User logout successfully.\n\n\t- User ID: ${id}`),
     });
 
+    // Broadcast user-left event via Socket.IO to update currently online card
+    io.to("online-users").emit("user-left", {
+      userId: id,
+      platform: platform,
+      timestamp: Date.now(),
+    });
+
+    // 🔹 Broadcast stats-updated for online cards
+    io.emit("stats-updated", {
+      event: "user-logout",
+      userId: id,
+      platform: platform,
+      timestamp: Date.now(),
+    });
+
+    console.log(
+      `[Socket.IO] Broadcasting user-left and stats-updated events for user ${id} on ${platform}`
+    );
+
     return res.json({ status: true, message: "Logout successful" });
   });
 });
+
+// Configure storage for profile pictures in the profile-pic folder
+const profilePicStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, "profile-pic"));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    // Sanitize filename: replace spaces and special characters
+    const sanitizedName = file.originalname
+      .replace(/[^a-zA-Z0-9.-]/g, "_")
+      .toLowerCase();
+    cb(null, uniqueSuffix + "-" + sanitizedName);
+  },
+});
+const profilePicUpload = multer({ storage: profilePicStorage });
+
+// Route to upload profile picture
+app.post(
+  "/upload-profile-pic",
+  profilePicUpload.single("profilePic"),
+  (req, res) => {
+    const { userId } = req.body;
+    const file = req.file;
+
+    if (!userId || !file) {
+      return res.status(400).json({
+        status: false,
+        error: "User ID and profile picture file are required",
+      });
+    }
+
+    // First, fetch the current user to get the old profile picture filename
+    const fetchSql = "SELECT profile_pic FROM user_account WHERE id = ?";
+    oms_db.query(fetchSql, [userId], (err, results) => {
+      if (err) {
+        console.error("Error fetching current profile picture:", err);
+        return res.status(500).json({
+          status: false,
+          error: "Failed to fetch current user data",
+        });
+      }
+
+      // Delete the old profile picture file if it exists and is not a default icon
+      if (results.length > 0 && results[0].profile_pic) {
+        const oldProfilePic = results[0].profile_pic;
+
+        // Only delete if it's not an icon path (doesn't start with "src/")
+        if (!oldProfilePic.startsWith("src/")) {
+          const oldFilePath = path.join(
+            __dirname,
+            "profile-pic",
+            oldProfilePic
+          );
+          fs.unlink(oldFilePath, (unlinkErr) => {
+            if (unlinkErr && unlinkErr.code !== "ENOENT") {
+              console.warn(
+                "Warning: Could not delete old profile picture:",
+                unlinkErr
+              );
+            }
+          });
+        }
+      }
+
+      // Store only the filename (without path prefix)
+      const fileName = file.filename;
+
+      // Update the user_account table with the new profile picture filename
+      const updateSql = "UPDATE user_account SET profile_pic = ? WHERE id = ?";
+
+      oms_db.query(updateSql, [fileName, userId], (err) => {
+        if (err) {
+          console.error("Error updating profile picture:", err);
+          return res.status(500).json({
+            status: false,
+            error: "Failed to update profile picture",
+          });
+        }
+
+        // Fetch the updated user details
+        const updatedFetchSql = "SELECT * FROM user_account WHERE id = ?";
+        oms_db.query(updatedFetchSql, [userId], (err, updatedResults) => {
+          if (err || updatedResults.length === 0) {
+            console.error("Error fetching updated user:", err);
+            return res.status(500).json({
+              status: false,
+              error: "Failed to fetch updated user details",
+            });
+          }
+
+          // Remove sensitive data
+          const user = updatedResults[0];
+          delete user.password;
+
+          return res.json({
+            status: true,
+            data: user,
+            message: "Profile picture updated successfully",
+          });
+        });
+      });
+    });
+  }
+);
 
 app.post("/fetch-financial-groupings-deposit", (req, res) => {
   const { mode, searchTerm, year, startDate, endDate } = req.body;
@@ -4574,6 +5000,90 @@ app.post("/fetch-announcement-approvals", (req, res) => {
   });
 });
 
+app.post("/fetch-event-approvals", (req, res) => {
+  const { mode, searchTerm, year, startDate, endDate } = req.body;
+
+  // Base query: fetch event approvals with pending decision
+  let sql = `
+    SELECT 
+      id, 
+      name, 
+      created_at, 
+      relating_id,
+      decision
+    FROM approval
+  `;
+
+  let conditions = [];
+  let params = [];
+
+  // Mandatory condition for status
+  conditions.push("type IN ('Event')");
+  conditions.push("decision IS NULL");
+
+  // Additional filtering based on mode
+  if (mode === "Search") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+  } else if (mode === "Filter") {
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  } else if (mode === "Mixed") {
+    conditions.push("(name LIKE ?)");
+    const pattern = `%${searchTerm}%`;
+    params.push(pattern);
+    conditions.push("YEAR(created_at) = ?");
+    params.push(year);
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+  }
+
+  // If any conditions exist, append them in the WHERE clause
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Order by created_at descending
+  sql += `
+    ORDER BY created_at DESC
+  `;
+
+  oms_db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error("Error fetching event approvals:", err);
+      return res
+        .status(500)
+        .json({ status: false, error: "Internal Server Error" });
+    }
+
+    // Format created_at for each event record if not null.
+    const data = results.map((eventApprovals) => {
+      eventApprovals.created_at = formatDateTableNoTime(
+        eventApprovals.created_at
+      );
+      eventApprovals.relating_id = "Event ID - " + eventApprovals.relating_id;
+      return eventApprovals;
+    });
+
+    return res.json({ status: true, data: data });
+  });
+});
+
 app.post("/fetch-decided-approvals", (req, res) => {
   const { mode, searchTerm, year, startDate, endDate } = req.body;
 
@@ -4644,20 +5154,22 @@ app.post("/fetch-decided-approvals", (req, res) => {
         .json({ status: false, error: "Internal Server Error" });
     }
 
-    // Format created_at for each payment record if not null.
-    const data = results.map((paymentApprovals) => {
-      paymentApprovals.updated_at = formatDateTableNoTime(
-        paymentApprovals.updated_at
+    const data = results.map((decidedApprovals) => {
+      decidedApprovals.updated_at = formatDateTableNoTime(
+        decidedApprovals.updated_at
       );
-      if (paymentApprovals.type === "Budget") {
-        paymentApprovals.relating_id =
-          "Budget ID - " + paymentApprovals.relating_id;
-      } else if (paymentApprovals.type === "Payment") {
-        paymentApprovals.relating_id =
-          "Payment ID - " + paymentApprovals.relating_id;
+      if (decidedApprovals.type === "Budget") {
+        decidedApprovals.relating_id =
+          "Budget ID - " + decidedApprovals.relating_id;
+      } else if (decidedApprovals.type === "Payment") {
+        decidedApprovals.relating_id =
+          "Payment ID - " + decidedApprovals.relating_id;
+      } else if (decidedApprovals.type === "Event") {
+        decidedApprovals.relating_id =
+          "Event ID - " + decidedApprovals.relating_id;
       }
 
-      return paymentApprovals;
+      return decidedApprovals;
     });
 
     return res.json({ status: true, data: data });
@@ -5563,6 +6075,82 @@ app.post("/delete-draft-payment", (req, res) => {
   });
 });
 
+app.post("/event-approval-decision", (req, res) => {
+  const { approval_id, decision_message, decision, id } = req.body;
+  if (!approval_id || !decision_message || !decision || !id) {
+    return res
+      .status(400)
+      .json({ status: false, error: "Missing required fields" });
+  }
+
+  // First, update the approval record with the decision and decision_message
+  const updateApprovalSql = `
+    UPDATE approval 
+    SET decision_message = ?, decision = ?
+    WHERE id = ?
+  `;
+  oms_db.query(
+    updateApprovalSql,
+    [decision_message, decision, approval_id],
+    (err, result) => {
+      if (err) {
+        console.error("Error updating approval record:", err);
+        return res
+          .status(500)
+          .json({ status: false, error: "Internal Server Error" });
+      }
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ status: false, error: "Approval record not found" });
+      }
+
+      // Determine the new status for the event record based on the decision
+      let newStatus = "";
+      if (decision === "Approved") {
+        newStatus = "Ready to Publish";
+      } else if (decision === "Disapproved") {
+        newStatus = "Back To Draft";
+      } else {
+        return res
+          .status(400)
+          .json({ status: false, error: "Invalid decision value" });
+      }
+
+      // Set the approval_id update value: null if disapproved, otherwise leave unchanged (approval_id)
+      const approvalIdUpdate = decision === "Disapproved" ? null : approval_id;
+
+      // Update the corresponding event record where id matches the provided id
+      const updateEventSql = `
+        UPDATE event 
+        SET status = ?, approved_at = NOW(), approval_id = ?
+        WHERE id = ?
+      `;
+      oms_db.query(
+        updateEventSql,
+        [newStatus, approvalIdUpdate, id],
+        (err2, eventResult) => {
+          if (err2) {
+            console.error("Error updating event record:", err2);
+            return res
+              .status(500)
+              .json({ status: false, error: "Internal Server Error" });
+          }
+          if (eventResult.affectedRows === 0) {
+            return res
+              .status(404)
+              .json({ status: false, error: "Event record not found" });
+          }
+          return res.json({
+            status: true,
+            message: "Decision submitted and event updated successfully",
+          });
+        }
+      );
+    }
+  );
+});
+
 // Route to check if an event group with the given name already exists
 app.post("/check-event-exist", (req, res) => {
   const { name } = req.body;
@@ -5695,7 +6283,7 @@ app.post("/fetch-draft-events", (req, res) => {
 
       if (event.date === null) {
         event.date = "Not Set";
-      }
+      } else [(event.date = formatDateTableNoTime(event.date))];
 
       return event;
     });
@@ -5707,29 +6295,29 @@ app.post("/fetch-draft-events", (req, res) => {
 app.post("/fetch-pending-event-approvals", (req, res) => {
   const { mode, searchTerm, year, startDate, endDate } = req.body;
 
-  // Base query: always restrict to events with status 'Draft' or 'Back to Draft'
+  // Base query: always restrict to events with status 'Ready to Publish' or 'Sent for Approval'
   let sql = `
     SELECT 
       id, 
       name, 
+      date,
       created_at, 
-      start_date, 
-      end_date,
+      updated_at,
       status
-    FROM event_group
+    FROM event
   `;
 
   let conditions = [];
   let params = [];
 
   // Mandatory condition for status
-  conditions.push("status IN ('Sent for Approval', 'Ready to Publish')");
+  conditions.push("status IN ('Ready to Publish', 'Sent for Approval')");
 
   // Additional filtering based on mode
   if (mode === "Search") {
-    conditions.push("(CAST(amount AS CHAR) LIKE ? OR name LIKE ?)");
+    conditions.push("name LIKE ?");
     const pattern = `%${searchTerm}%`;
-    params.push(pattern, pattern);
+    params.push(pattern);
   } else if (mode === "Filter") {
     conditions.push("YEAR(created_at) = ?");
     params.push(year);
@@ -5762,7 +6350,7 @@ app.post("/fetch-pending-event-approvals", (req, res) => {
     sql += " WHERE " + conditions.join(" AND ");
   }
 
-  // Order so that 'Back to Draft' comes first then 'Draft', and order by updated_at descending.
+  // Order so that 'Ready to Publish' comes first then 'Sent for Approval', and order by updated_at descending.
   sql += `
     ORDER BY 
       CASE status 
@@ -5775,7 +6363,7 @@ app.post("/fetch-pending-event-approvals", (req, res) => {
 
   oms_db.query(sql, params, (err, results) => {
     if (err) {
-      console.error("Error fetching draft events:", err);
+      console.error("Error fetching pending event approvals:", err);
       return res
         .status(500)
         .json({ status: false, error: "Internal Server Error" });
@@ -5786,23 +6374,10 @@ app.post("/fetch-pending-event-approvals", (req, res) => {
         event.created_at = formatDateTableNoTime(event.created_at);
       }
 
-      // Format start and end dates for the event using formatDateTableNoTime
-      const formattedStart = event.start_date
-        ? formatDateTableNoTime(event.start_date)
-        : null;
-      const formattedEnd = event.end_date
-        ? formatDateTableNoTime(event.end_date)
-        : null;
-
-      if (!formattedStart && !formattedEnd) {
-        event.date_range = "Not Yet Set";
-      } else if (formattedStart && formattedEnd) {
-        event.date_range =
-          formattedStart === formattedEnd
-            ? formattedStart
-            : formattedStart + " - " + formattedEnd;
+      if (event.date === null) {
+        event.date = "Not Set";
       } else {
-        event.date_range = formattedStart ? formattedStart : formattedEnd;
+        event.date = formatDateTableNoTime(event.date);
       }
 
       return event;
@@ -5902,6 +6477,14 @@ app.post("/update-draft-event", (req, res) => {
     status,
     request_message,
   } = req.body;
+
+  // Parse user_data first
+  let userObj;
+  try {
+    userObj = JSON.parse(user_data);
+  } catch (err) {
+    return res.status(400).json({ status: false, error: "Invalid user data" });
+  }
 
   // For "Sent for Approval" status, require all fields
   if (status === "Sent for Approval") {
@@ -6330,9 +6913,513 @@ app.use(
   express.static(path.join(__dirname, "qr-codes/users"))
 );
 app.use("/receipts", express.static(path.join(__dirname, "receipts")));
+app.use("/profile-pic", express.static(path.join(__dirname, "profile-pic")));
+
+// ============================================================================
+// 🔹 SESSION DETECTION ENDPOINTS (Server-side session tracking)
+// ============================================================================
+
+// Start Session (called when user logs in)
+app.post("/api/sessions/start", (req, res) => {
+  try {
+    const { userId, platform = "web" } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Generate unique session ID
+    const sessionId = uuidv4();
+
+    // Register session in manager
+    const session = sessionManager.registerSession(sessionId, userId, platform);
+
+    res.json({
+      success: true,
+      sessionId,
+      message: "Session started",
+    });
+  } catch (error) {
+    console.error("[API] Error starting session:", error);
+    res.status(500).json({ error: "Failed to start session" });
+  }
+});
+
+// Heartbeat endpoint (called every 7 seconds from frontend)
+app.post("/api/sessions/heartbeat", (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId required" });
+    }
+
+    // Update heartbeat timestamp
+    const updated = sessionManager.updateHeartbeat(sessionId);
+
+    if (!updated) {
+      return res.status(401).json({ error: "Session not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Heartbeat received",
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error("[API] Error processing heartbeat:", error);
+    res.status(500).json({ error: "Failed to process heartbeat" });
+  }
+});
+
+// Explicit logout endpoint
+app.post("/api/sessions/end", (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId required" });
+    }
+
+    // Destroy session
+    const session = sessionManager.destroySession(sessionId);
+
+    if (!session) {
+      return res.status(401).json({ error: "Session not found" });
+    }
+
+    // First, fetch current user status to check both platforms
+    const fetchUserSql =
+      "SELECT is_login_web, is_login_mobile FROM user_account WHERE id = ?";
+    oms_db.query(fetchUserSql, [session.userId], (fetchErr, userResults) => {
+      if (fetchErr || !userResults || userResults.length === 0) {
+        console.error("[Session] Error fetching user status:", fetchErr);
+        return res.json({
+          success: true,
+          message: "Session ended",
+          userId: session.userId,
+        });
+      }
+
+      const currentUser = userResults[0];
+      let updateSql = "UPDATE user_account SET ";
+      const updates = [];
+
+      // Update platform-specific login status
+      if (session.platform === "web") {
+        updates.push("is_login_web = 0");
+      } else if (session.platform === "mobile") {
+        updates.push("is_login_mobile = 0");
+      }
+
+      // Check if user will have any active logins after this update
+      let willHaveActiveLogins = false;
+      if (session.platform === "web") {
+        // User is logging out from web, check if mobile is still logged in
+        willHaveActiveLogins = currentUser.is_login_mobile === 1;
+      } else if (session.platform === "mobile") {
+        // User is logging out from mobile, check if web is still logged in
+        willHaveActiveLogins = currentUser.is_login_web === 1;
+      }
+
+      // If no active logins will remain, set is_online = 0
+      if (!willHaveActiveLogins) {
+        updates.push("is_online = 0");
+      }
+
+      if (updates.length > 0) {
+        updateSql += updates.join(", ") + " WHERE id = ?";
+        oms_db.query(updateSql, [session.userId], (updateErr) => {
+          if (updateErr) {
+            console.error("[Session] Error updating user status:", updateErr);
+          } else {
+            console.log(
+              `[Session] Updated user ${session.userId}: ${updates.join(", ")}`
+            );
+          }
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Session ended",
+        userId: session.userId,
+      });
+    });
+  } catch (error) {
+    console.error("[API] Error ending session:", error);
+    res.status(500).json({ error: "Failed to end session" });
+  }
+});
+
+// Check session status
+app.get("/api/sessions/status/:sessionId", (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = sessionManager.getSession(sessionId);
+
+    if (!session) {
+      return res.json({
+        active: false,
+        message: "Session not found",
+      });
+    }
+
+    res.json({
+      active: true,
+      userId: session.userId,
+      platform: session.platform,
+      lastHeartbeat: session.lastHeartbeat,
+      timeSinceLastHeartbeat: Date.now() - session.lastHeartbeat,
+    });
+  } catch (error) {
+    console.error("[API] Error checking session status:", error);
+    res.status(500).json({ error: "Failed to check session status" });
+  }
+});
+
+// Admin monitoring - session stats
+app.get("/api/admin/session-stats", (req, res) => {
+  try {
+    const stats = sessionManager.getStats();
+    const allSessions = sessionManager.getAllSessions();
+    const userSessionSummary = sessionManager.getUserSessionSummary();
+    const uniqueUserCount = sessionManager.getUniqueActiveUserCount();
+
+    res.json({
+      stats: {
+        ...stats,
+        uniqueActiveUsers: uniqueUserCount,
+      },
+      userSessionSummary,
+      sessions: allSessions,
+      serverTime: Date.now(),
+    });
+  } catch (error) {
+    console.error("[API] Error getting session stats:", error);
+    res.status(500).json({ error: "Failed to get session stats" });
+  }
+});
+
+// ============================================================================
+// 🔹 BACKGROUND TASKS (Session monitoring & cleanup)
+// ============================================================================
+
+const INACTIVITY_TIMEOUT = 1800000; // 30 minutes (1800000 ms) - configurable
+const CHECK_INTERVAL = 60000; // Check every 60 seconds (1 minute) - configurable
+
+const inactivityCheckInterval = setInterval(() => {
+  const inactiveSessions = sessionManager.checkInactiveSessions(
+    INACTIVITY_TIMEOUT,
+    (session, sessionId) => {
+      // Called for each inactive session detected
+      console.log(
+        `[Auto-Logout] Session inactive: ${sessionId} (user: ${session.userId}, platform: ${session.platform})`
+      );
+
+      // Fetch current user status to check both platforms
+      const fetchUserSql =
+        "SELECT is_login_web, is_login_mobile FROM user_account WHERE id = ?";
+      oms_db.query(fetchUserSql, [session.userId], (fetchErr, userResults) => {
+        if (fetchErr || !userResults || userResults.length === 0) {
+          console.error("[Session] Error fetching user status:", fetchErr);
+          return;
+        }
+
+        const currentUser = userResults[0];
+        let updateSql = "UPDATE user_account SET ";
+        const updates = [];
+
+        // Update platform-specific login status
+        if (session.platform === "web") {
+          updates.push("is_login_web = 0");
+        } else if (session.platform === "mobile") {
+          updates.push("is_login_mobile = 0");
+        }
+
+        // Check if user will have any active logins after this update
+        let willHaveActiveLogins = false;
+        if (session.platform === "web") {
+          // User is logging out from web, check if mobile is still logged in
+          willHaveActiveLogins = currentUser.is_login_mobile === 1;
+        } else if (session.platform === "mobile") {
+          // User is logging out from mobile, check if web is still logged in
+          willHaveActiveLogins = currentUser.is_login_web === 1;
+        }
+
+        // If no active logins will remain, set is_online = 0
+        if (!willHaveActiveLogins) {
+          updates.push("is_online = 0");
+        }
+
+        if (updates.length > 0) {
+          updateSql += updates.join(", ") + " WHERE id = ?";
+          oms_db.query(updateSql, [session.userId], (updateErr) => {
+            if (updateErr) {
+              console.error("[Session] Error updating user status:", updateErr);
+            } else {
+              console.log(
+                `[Session] Updated user ${session.userId}: ${updates.join(
+                  ", "
+                )}`
+              );
+
+              // 🔹 Broadcast user-offline event when user becomes completely offline due to inactivity
+              if (!willHaveActiveLogins) {
+                io.to("online-users").emit("user-left", {
+                  userId: session.userId,
+                  platform: session.platform,
+                  timestamp: Date.now(),
+                  reason: "inactivity",
+                });
+
+                // 🔹 Broadcast stats-updated for online cards
+                io.emit("stats-updated", {
+                  event: "inactivity",
+                  userId: session.userId,
+                  platform: session.platform,
+                  timestamp: Date.now(),
+                });
+
+                console.log(
+                  `[Socket.IO] Broadcasting user-left and stats-updated for user ${session.userId} (inactivity)`
+                );
+              }
+            }
+          });
+        }
+      });
+    }
+  );
+
+  if (inactiveSessions.length > 0) {
+    console.log(
+      `[Session] Detected ${inactiveSessions.length} inactive sessions`
+    );
+  }
+}, CHECK_INTERVAL);
+
+// Stats logging every 60 seconds
+const statsLogInterval = setInterval(() => {
+  const stats = sessionManager.getStats();
+  const userSummary = sessionManager.getUserSessionSummary();
+
+  // Count users active on both platforms
+  const usersOnBothPlatforms = Object.values(userSummary).filter(
+    (u) => u.isActiveOnBothPlatforms
+  ).length;
+
+  console.log(
+    `[Session Stats] Sessions: ${stats.totalActiveSessions}, Users: ${stats.totalActiveUsers} ` +
+      `(${usersOnBothPlatforms} on both platforms), Platforms: ${JSON.stringify(
+        stats.platformBreakdown
+      )}`
+  );
+}, 60000);
+
+// Cleanup intervals on server shutdown
+process.on("SIGTERM", () => {
+  clearInterval(inactivityCheckInterval);
+  clearInterval(statsLogInterval);
+  sessionManager.shutdown();
+  console.log("[Session] Manager shutdown on SIGTERM");
+});
+
+process.on("SIGINT", () => {
+  clearInterval(inactivityCheckInterval);
+  clearInterval(statsLogInterval);
+  sessionManager.shutdown();
+  console.log("[Session] Manager shutdown on SIGINT");
+  process.exit(0);
+});
+
+// ============================================================================
+// Sync user online status from session backup on server startup
+// ============================================================================
+async function syncUserSessionStatus() {
+  try {
+    console.log("[Startup] Syncing user session status from backup...");
+
+    // Get all sessions from backup
+    const sessionSummary = sessionManager.getUserSessionSummary();
+
+    if (Object.keys(sessionSummary).length === 0) {
+      console.log(
+        "[Startup] No active sessions in backup. Resetting all users offline."
+      );
+
+      // Reset all users to offline
+      const resetQuery =
+        "UPDATE user_account SET is_online = 0, is_login_web = 0, is_login_mobile = 0";
+      oms_db.query(resetQuery, (err) => {
+        if (err) {
+          console.error("[Startup] Error resetting user statuses:", err);
+        } else {
+          console.log("[Startup] All users reset to offline status.");
+        }
+      });
+
+      return;
+    }
+
+    // For each user with active sessions, update their online status based on platforms
+    const updatePromises = Object.entries(sessionSummary).map(
+      ([userId, userInfo]) => {
+        return new Promise((resolve) => {
+          const is_online = 1; // User has active session
+          const is_login_web = userInfo.webSessions > 0 ? 1 : 0;
+          const is_login_mobile = userInfo.mobileSessions > 0 ? 1 : 0;
+
+          const updateQuery =
+            "UPDATE user_account SET is_online = ?, is_login_web = ?, is_login_mobile = ? WHERE id = ?";
+
+          oms_db.query(
+            updateQuery,
+            [is_online, is_login_web, is_login_mobile, userId],
+            (err) => {
+              if (err) {
+                console.error(
+                  `[Startup] Error updating user ${userId} status:`,
+                  err
+                );
+              } else {
+                console.log(
+                  `[Startup] Updated user ${userId}: online=${is_online}, web=${is_login_web}, mobile=${is_login_mobile}`
+                );
+              }
+              resolve();
+            }
+          );
+        });
+      }
+    );
+
+    // Wait for all updates to complete
+    await Promise.all(updatePromises);
+
+    // Get all users and reset those not in active sessions
+    const getAllUsersQuery = "SELECT id FROM user_account";
+    oms_db.query(getAllUsersQuery, (err, results) => {
+      if (err) {
+        console.error("[Startup] Error fetching all users:", err);
+        return;
+      }
+
+      const activeUserIds = new Set(Object.keys(sessionSummary));
+
+      results.forEach((user) => {
+        if (!activeUserIds.has(String(user.id))) {
+          // User not in active sessions, reset their status
+          const resetUserQuery =
+            "UPDATE user_account SET is_online = 0, is_login_web = 0, is_login_mobile = 0 WHERE id = ?";
+          oms_db.query(resetUserQuery, [user.id], (err) => {
+            if (err) {
+              console.error(
+                `[Startup] Error resetting user ${user.id} status:`,
+                err
+              );
+            }
+          });
+        }
+      });
+
+      console.log(
+        `[Startup] Session sync complete. ${
+          Object.keys(sessionSummary).length
+        } users online, ${
+          results.length - Object.keys(sessionSummary).length
+        } users offline.`
+      );
+    });
+  } catch (error) {
+    console.error("[Startup] Error syncing session status:", error);
+  }
+}
 
 // 🔹 Start Express Server
 const PORT = process.env.PORT || 8081;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
+  // Initialize session manager (load persisted sessions)
+  sessionManager.initialize();
+
+  // Sync user online status with database
+  syncUserSessionStatus();
+
   console.log(`Server running on http://localhost:${PORT}`);
+});
+
+// ============================================================================
+// Socket.IO Connection Handler - for real-time online user updates
+// ============================================================================
+io.on("connection", (socket) => {
+  console.log(`[Socket.IO] User connected: ${socket.id}`);
+
+  // When client joins the "online-users" room for live updates
+  socket.on("join-online-users", (data) => {
+    socket.join("online-users");
+    console.log(`[Socket.IO] ${socket.id} joined online-users room`);
+  });
+
+  // When a user comes online (emitted from /api/sessions/start)
+  socket.on("user-online", (data) => {
+    const { userId, platform } = data;
+    console.log(
+      `[Socket.IO] User ${userId} came online on ${platform} (${socket.id})`
+    );
+
+    // Broadcast to all clients in the room
+    io.to("online-users").emit("user-joined", {
+      userId,
+      platform,
+      timestamp: Date.now(),
+    });
+  });
+
+  // When a user goes offline (emitted from /api/sessions/end)
+  socket.on("user-offline", (data) => {
+    const { userId } = data;
+    console.log(`[Socket.IO] User ${userId} went offline (${socket.id})`);
+
+    // Broadcast to all clients in the room
+    io.to("online-users").emit("user-left", {
+      userId,
+      timestamp: Date.now(),
+    });
+  });
+
+  // Request full list of online users
+  socket.on("request-online-users", () => {
+    const sql = `
+      SELECT 
+        u.id,
+        u.profile_pic,
+        u.student_id,
+        u.full_name,
+        CASE 
+          WHEN u.is_login_web = 1 AND u.is_login_mobile = 1 THEN 'Web & Mobile'
+          WHEN u.is_login_web = 1 THEN 'Web'
+          WHEN u.is_login_mobile = 1 THEN 'Mobile'
+          ELSE 'Unknown'
+        END AS platform,
+        u.updated_at
+      FROM user_account u
+      WHERE u.is_online = 1 
+        AND u.designation <> 'Admin'
+      ORDER BY u.updated_at DESC
+    `;
+
+    oms_db.query(sql, [], (err, results) => {
+      if (err) {
+        console.error("[Socket.IO] Error fetching online users:", err);
+        socket.emit("online-users-list", { data: [], error: err });
+        return;
+      }
+
+      socket.emit("online-users-list", { data: results });
+    });
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`[Socket.IO] User disconnected: ${socket.id}`);
+  });
 });

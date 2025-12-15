@@ -553,7 +553,7 @@ export default function EditDraftBudgetModal({
                           }));
                           setIsEditingDetails(false);
                         }}
-                        className="transition-all duration-150 transform hover:scale-105 hover:bg-blue-800 bg-blue-600 text-white px-3 py-1 rounded text-sm cursor-pointer"
+                        className="transition-all duration-150 transform hover:scale-105 hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer"
                       >
                         Save Details
                       </Button>
@@ -565,7 +565,7 @@ export default function EditDraftBudgetModal({
                           setEditedDescription(details?.description || "");
                           setIsEditingDetails(false);
                         }}
-                        className="transition-all duration-150 transform hover:scale-105 hover:bg-gray-800 bg-gray-400 text-white px-3 py-1 rounded text-sm cursor-pointer"
+                        className="transition-all duration-150 transform hover:scale-105 hover:bg-gray-800 bg-gray-400 text-white px-4 py-2 rounded text-sm cursor-pointer"
                       >
                         Cancel
                       </Button>

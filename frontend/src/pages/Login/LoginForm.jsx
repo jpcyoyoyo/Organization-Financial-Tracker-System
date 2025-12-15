@@ -46,7 +46,7 @@ export function LoginForm({ setIsAuthenticated }) {
   };
 
   return (
-    <Card className="w-full shadow-xl rounded-3xl bg-white py-7 sm:py-10 md:py-15 md:w-md md:h-125 xl:px-12">
+    <Card className="transition-all duration-300 w-xs rounded-3xl bg-white py-7 sm:py-10 md:py-15 sm:w-full md:w-sm lg:w-md md:h-125 xl:px-12">
       <CardHeader>
         <CardTitle className="text-center font-bold text-4xl sm:text-5xl">
           Log-in
@@ -55,7 +55,7 @@ export function LoginForm({ setIsAuthenticated }) {
       <CardContent>
         {/* Fixed-height container for login message */}
         <div
-          className={`h-8 sm:h-10 text-sm sm:text-base flex items-center justify-center transition-opacity duration-300 ${
+          className={`h-8 sm:h-10 text-xs sm:text-sm md:text-base flex items-center justify-center transition-opacity duration-300 ${
             error || success ? "opacity-100" : "opacity-0"
           }`}
         >

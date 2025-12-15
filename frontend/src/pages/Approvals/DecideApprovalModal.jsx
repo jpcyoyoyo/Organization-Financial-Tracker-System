@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { IpContext } from "../../context/IpContext";
 import DecideBudgetApproval from "./DecideBudgetApproval";
 import DecidePaymentApproval from "./DecidePaymentApproval";
+import DecideEventApproval from "./DecideEventApproval";
 
 export default function DecideApprovalModal({
   isOpen,
@@ -19,6 +20,7 @@ export default function DecideApprovalModal({
   const [error, setError] = useState("");
   const [showDecideBudgetModal, setShowDecideBudgetModal] = useState(false);
   const [showDecidePaymentModal, setShowDecidePaymentModal] = useState(false);
+  const [showDecideEventModal, setShowDecideEventModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && id) {
@@ -58,6 +60,8 @@ export default function DecideApprovalModal({
       setShowDecideBudgetModal(true);
     } else if (details.type === "Payment") {
       setShowDecidePaymentModal(true);
+    } else if (details.type === "Event") {
+      setShowDecideEventModal(true);
     }
   };
 
@@ -181,6 +185,18 @@ export default function DecideApprovalModal({
             onRefreshGlobalData();
           }}
         ></DecidePaymentApproval>
+      )}
+      {showDecideEventModal && details.relating_id && (
+        <DecideEventApproval
+          isOpen={showDecideEventModal}
+          onClose={() => setShowDecideEventModal(false)}
+          id={details.relating_id}
+          refreshData={refreshData}
+          handleClose={() => {
+            onClose();
+            onRefreshGlobalData();
+          }}
+        ></DecideEventApproval>
       )}
     </>
   );

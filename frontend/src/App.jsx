@@ -48,6 +48,8 @@ import YourAttendances from "./pages/YourAttendances/YourAttendances";
 import Sections from "./pages/Sections/Sections";
 import ManageEvents from "./pages/ManageEvents/ManageEvents";
 import Servicing from "./pages/Servicing/Servicing";
+import Profile from "./pages/Profile/Profile";
+import useServerSessionDetection from "./hooks/useServerSessionDetection";
 
 // Import the sidebar configuration (adjust the path as needed)
 import sidebarConfig from "./data/sidebarConfig.json";
@@ -56,13 +58,17 @@ import sidebarConfig from "./data/sidebarConfig.json";
 function getAllowedRoutes(designation) {
   const allowed = new Set();
 
-  sidebarConfig.topLevelTabs.forEach((tab) => allowed.add(tab.path));
+  sidebarConfig.topLevelTabs
+    .filter((tab) => !tab.hide)
+    .forEach((tab) => allowed.add(tab.path));
 
   // If the user is an admin, restrict allowed routes to only those under "Admin Panel"
   if (designation.toLowerCase() === "admin") {
     const adminPanel = sidebarConfig.groups["Admin Panel"];
     if (adminPanel && Array.isArray(adminPanel)) {
-      adminPanel.forEach((item) => allowed.add(item.path));
+      adminPanel
+        .filter((item) => !item.hide)
+        .forEach((item) => allowed.add(item.path));
     }
   }
 
@@ -70,14 +76,20 @@ function getAllowedRoutes(designation) {
   Object.entries(sidebarConfig.groups).forEach(([groupName, groupData]) => {
     if (groupName === "Your Obligations") {
       if (groupData[designation]) {
-        groupData[designation].forEach((item) => allowed.add(item.path));
+        groupData[designation]
+          .filter((item) => !item.hide)
+          .forEach((item) => allowed.add(item.path));
       } else if (groupData["default"]) {
-        groupData["default"].forEach((item) => allowed.add(item.path));
+        groupData["default"]
+          .filter((item) => !item.hide)
+          .forEach((item) => allowed.add(item.path));
       }
     } else {
       // Other groups: assume groupData is an array
       if (Array.isArray(groupData)) {
-        groupData.forEach((item) => allowed.add(item.path));
+        groupData
+          .filter((item) => !item.hide)
+          .forEach((item) => allowed.add(item.path));
       }
     }
   });
@@ -102,13 +114,52 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [designation, setDesignation] = useState("");
 
+  // Get session ID from sessionStorage (set by login, not pre-generated)
+  const sessionId = useMemo(() => {
+    return sessionStorage.getItem("sessionId") || null;
+  }, []);
+
+  // Initialize server-side session detection (sends heartbeat every 7 seconds)
+  useServerSessionDetection(sessionId);
+
   // 1) Check auth token on mount
   useEffect(() => {
     const token = sessionStorage.getItem("authToken");
     setIsAuthenticated(!!token);
   }, []);
 
-  // 2) Load designation whenever auth status changes
+  // 2) Listen for auth token changes (including 401 auto-logout from session detection)
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      // Detect when authToken is removed (either by this tab or another tab)
+      if (e.key === "authToken") {
+        if (!e.newValue) {
+          // Auth token was removed - logout user
+          console.log("[Auth] Auth token removed - updating UI to logout");
+          setIsAuthenticated(false);
+        } else {
+          // Auth token was set - login user
+          setIsAuthenticated(true);
+        }
+      }
+    };
+
+    // Listen for custom session-expired event (same-tab detection)
+    const handleSessionExpired = (e) => {
+      console.log("[Auth] Session expired event received:", e.detail);
+      setIsAuthenticated(false);
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("session-expired", handleSessionExpired);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("session-expired", handleSessionExpired);
+    };
+  }, []);
+
+  // Load designation whenever auth status changes
   useEffect(() => {
     if (isAuthenticated) {
       const userStr = sessionStorage.getItem("user");
@@ -123,6 +174,84 @@ export default function App() {
     } else {
       // Clear designation on logout
       setDesignation("");
+    }
+  }, [isAuthenticated]);
+
+  // Handle automatic logout when tab is closed (not on refresh)
+  useEffect(() => {
+    let isRefreshing = false;
+
+    const handleBeforeUnload = () => {
+      isRefreshing = true;
+      sessionStorage.setItem("isRefreshing", "true");
+    };
+
+    const handlePageHide = async () => {
+      // Wait a moment to check the flag
+      setTimeout(() => {
+        if (!isRefreshing && isAuthenticated) {
+          const wasRefreshing =
+            sessionStorage.getItem("isRefreshing") === "true";
+
+          if (!wasRefreshing) {
+            console.log("Tab closing - performing logout");
+
+            // Get user data and IP for logout request
+            const userStr = sessionStorage.getItem("user");
+            const currentIp =
+              sessionStorage.getItem("currentIp") ||
+              "http://192.168.100.20:8081";
+
+            if (userStr) {
+              try {
+                const user = JSON.parse(userStr);
+
+                // Use navigator.sendBeacon for better reliability on tab close
+                const logoutData = new FormData();
+                logoutData.append("id", user.user_id);
+                logoutData.append("platform", "web");
+
+                // Try sendBeacon first (most reliable for tab close)
+                if (navigator.sendBeacon) {
+                  navigator.sendBeacon(`${currentIp}/logout`, logoutData);
+                  console.log("Logout beacon sent");
+                } else {
+                  // Fallback to fetch with keepalive
+                  fetch(`${currentIp}/logout`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      id: user.user_id,
+                      platform: "web",
+                    }),
+                    keepalive: true,
+                  }).catch((err) => console.warn("Logout fetch error:", err));
+                }
+              } catch (err) {
+                console.error("Error during tab close logout:", err);
+              }
+            }
+
+            // Clear session storage
+            sessionStorage.removeItem("authToken");
+            sessionStorage.removeItem("user");
+          }
+
+          sessionStorage.removeItem("isRefreshing");
+        }
+      }, 0);
+    };
+
+    if (isAuthenticated) {
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      window.addEventListener("pagehide", handlePageHide);
+
+      return () => {
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+        window.removeEventListener("pagehide", handlePageHide);
+      };
     }
   }, [isAuthenticated]);
 
@@ -472,6 +601,7 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="profile" element={<Profile />} />
               </Route>
             )}
           </Routes>

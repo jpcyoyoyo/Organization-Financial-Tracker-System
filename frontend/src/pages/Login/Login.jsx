@@ -23,31 +23,48 @@ export default function LoginPage({ setIsAuthenticated }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin />
       </Helmet>
-      <BackgroundSection className="justify-center items-center p-12 sm:p-4">
+      <BackgroundSection className="transition-all duration-300 justify-center items-center p-12 sm:p-4">
         <motion.div
           initial={{ opacity: 0.5, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 2 }}
         >
-          <div className="flex flex-col md:flex-row w-full h-full items-center justify-items-center space-y-8 md:space-y-0 md:space-x-8">
-            {/* Left Section: Logo and Text */}
-            <div className="flex flex-col-reverse md:flex-col w-full xl:pl-24 md:w-9/20 sm:w-4/5 lg:w-1/2 items-center md:items-start space-y-6 md:space-y-0">
-              <div className="flex flex-row items-center sm:space-x-4 md:flex-col md:space-x-0">
-                <Logo size="250" bg={`w-35 sm:w-44 md:w-63`} />
-                <div className="text-left md:text-center">
-                  <h1 className="md:mt-4 text-3xl sm:text-4xl font-bold text-black px-4">
-                    COMSOC
-                  </h1>
-                  <p className="mt-1.5 sm:mt-4 text-sm sm:text-2xl font-bold text-black pl-4 sm:px-4">
-                    ORGANIZATION FINANCIAL SYSTEM
-                  </p>
+          <div className="transition-all duration-300 flex w-full items-center justify-center justify-items-center">
+            <div className="transition-all duration-300 shadow-xl flex bg-[url('/src/assets/it_bldg.png')] bg-[-0px_-40px] sm:bg-[-0px_-70px] md:bg-[-300px_-0px] bg-contain md:bg-[length:130%_130%] rounded-3xl">
+              <div className="transition-all duration-300 flex flex-col md:flex-row bg-[#ffb72855] rounded-3xl backdrop-blur-[1px] sm:backdrop-blur-[2px] md:backdrop-blur-[3px] space-y-4 md:space-y-0">
+                {/* Left Section: Logo and Text */}
+                <div className="transition-all duration-300 pt-4 md:pt-0 px-4 flex flex-col-reverse md:flex-col w-full items-center md:items-start space-y-6 md:space-y-0 self-center">
+                  <div className="transition-all duration-300 flex flex-row items-center md:h-full sm:space-x-4 md:space-x-0 md:flex-col md:pl-4 lg:w-sm">
+                    <Logo size="250" bg={`w-18 sm:w-32 md:w-63`} />
+                    <div className="transition-all duration-300 -mt-3 sm:-mt-6 md:-mt-0 h-auto sm:space-y-1 text-left md:text-center pl-3 md:pl-0">
+                      <h1
+                        className="transition-all duration-300 md:mt-4 text-[44px] sm:text-[80px] md:text-6xl font-bold text-black"
+                        style={{
+                          textShadow:
+                            "0px 1px 2px rgb(0 0 0 / 0.1), 0px 3px 2px rgb(0 0 0 / 0.1), 0px 4px 8px rgb(0 0 0 / 0.1)",
+                        }}
+                      >
+                        COMSOC
+                      </h1>
+
+                      <p
+                        className="transition-all duration-300 -mt-3 sm:-mt-6 md:-mt-0 text-[10px] sm:text-lg md:text-sm md:h-8 text-black text-center"
+                        style={{
+                          textShadow:
+                            "0px 1px 2px rgb(0 0 0 / 0.1), 0px 3px 2px rgb(0 0 0 / 0.1), 0px 4px 8px rgb(0 0 0 / 0.1)",
+                        }}
+                      >
+                        ORGANIZATION MANAGEMENT SYSTEM
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {/* Right Section: Form */}
+                <div className="transition-all duration-300 w-full md:h-125 items-center justify-center md:pl-4">
+                  <LoginForm setIsAuthenticated={setIsAuthenticated} />
                 </div>
               </div>
-            </div>
-            {/* Right Section: Form */}
-            <div className="w-full sm:w-4/5 md:w-11/20 lg:w-1/2 xl:pr-24 items-center justify-center">
-              <LoginForm setIsAuthenticated={setIsAuthenticated} />
             </div>
           </div>
         </motion.div>
@@ -56,6 +73,6 @@ export default function LoginPage({ setIsAuthenticated }) {
   );
 }
 
-LoginForm.propTypes = {
+LoginPage.propTypes = {
   setIsAuthenticated: PropTypes.func.isRequired,
 };

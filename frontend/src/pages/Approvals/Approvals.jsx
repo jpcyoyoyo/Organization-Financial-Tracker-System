@@ -179,6 +179,20 @@ export default function Approvals() {
           globalRefresh={globalRefresh}
         />
         <SearchListCard
+          cardName="EVENT APPROVALS"
+          listConfig={pendingListConfig}
+          fetchUrl={`${ip}/fetch-event-approvals`}
+          isCollapsed={isCollapsed}
+          testMode={false}
+          testData={testData}
+          viewModal={DecideApprovalModal}
+          itemsPerPage={2}
+          cardSize="h-87 md:h-37"
+          mobileCardSize="h-56.5"
+          refreshGlobalData={refreshAll}
+          globalRefresh={globalRefresh}
+        />
+        <SearchListCard
           cardName="DECIDED APPROVALS"
           listConfig={decidedListConfig}
           fetchUrl={`${ip}/fetch-decided-approvals`}

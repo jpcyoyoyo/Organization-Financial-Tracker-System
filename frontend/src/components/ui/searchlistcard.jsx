@@ -42,7 +42,6 @@ export default function SearchListCard({
   deleteModal: DeleteModal, // Custom modal component for deleting
   testMode,
   testData, // Expected shape: { data, years }
-  cardSize = "h-87 md:h-97",
   mobileCardSize = "h-120",
   itemsPerPage = 5,
   refreshGlobalData, // refresh callback passed from parent
@@ -77,7 +76,10 @@ export default function SearchListCard({
   const lastDataRef = useRef(null);
   const timerRef = useRef(null);
   const containerRef = useRef(null);
-  const [isVisible, setIsVisible] = useState(false);
+
+  // Calculate dynamic card height based on itemsPerPage (64px item + space-y-3 per row + 40px padding)
+  // Fixed based on itemsPerPage, not actual data length
+  const dynamicCardHeight = Math.max(40, itemsPerPage * (64 + 14) - 12);
 
   // Update window width on resize
   useEffect(() => {
@@ -86,20 +88,17 @@ export default function SearchListCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Handle visibility change (tab foreground/background)
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsVisible(entry.isIntersecting);
-      },
-      { threshold: 0.1 }
-    );
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (containerRef.current) observer.unobserve(containerRef.current);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("Tab returned to foreground, refreshing data...");
+        setFetching(true);
+      }
     };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
   const getMode = useCallback(() => {
@@ -128,11 +127,6 @@ export default function SearchListCard({
   }, [userData, searchTerm, year, startDate, endDate, getMode]);
 
   const fetchData = useCallback(async () => {
-    if (!isVisible) {
-      console.log("Current tab is not active, skipping fetch");
-      setFetching(false);
-      return;
-    }
     setError(null);
     setLoading(true);
     try {
@@ -156,27 +150,30 @@ export default function SearchListCard({
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
 
       if (sortedData.length === 0 && data.length === 0) {
-        console.warn(
-          "No records found, attempting to fetch again in 5 seconds..."
-        );
-        timerRef.current = setTimeout(fetchData, 10000);
+        console.warn("No records found.");
+        setError("No records found. Click refresh to retry.");
       }
     } catch (error) {
       console.error("Error fetching table data:", error);
       setData([]);
       setError(error.message);
-      timerRef.current = setTimeout(fetchData, 10000);
-      console.log("Reattempt fetching");
     } finally {
       setLoading(false);
       setFetching(false);
     }
-  }, [isVisible, fetchUrl, requestBody, data]);
+  }, [fetchUrl, requestBody, data]);
+
+  // Handle manual refresh button click
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
+    const timer = timerRef.current;
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
+      if (timer) {
+        clearTimeout(timer);
         setFetching(false);
       }
     };
@@ -336,18 +333,6 @@ export default function SearchListCard({
   }, [mobileItemsCount, data.length, itemsPerPage]);
 
   useEffect(() => {
-    console.log(
-      "[MobileScroll] effect run →",
-      "windowWidth:",
-      windowWidth,
-      "mobileItemsCount:",
-      mobileItemsCount,
-      "data.length:",
-      data.length,
-      "mobileContainerRef",
-      mobileContainerRef.current
-    );
-
     if (
       windowWidth < (isCollapsed ? 768 : 1024) &&
       mobileContainerRef.current
@@ -356,21 +341,14 @@ export default function SearchListCard({
 
       const onScroll = () => {
         const { scrollTop, clientHeight, scrollHeight } = scrollEl;
-        console.log("[MobileScroll:onScroll]", {
-          scrollTop,
-          clientHeight,
-          scrollHeight,
-        });
 
         if (scrollTop + clientHeight >= scrollHeight - 10) {
-          console.log("[MobileScroll] bottom reached → loading more");
           handleLoadMore();
         }
       };
 
       scrollEl.addEventListener("scroll", onScroll);
       return () => {
-        console.log("[MobileScroll] cleaning up listener");
         scrollEl.removeEventListener("scroll", onScroll);
       };
     }
@@ -431,7 +409,7 @@ export default function SearchListCard({
           isOpen={showViewModal}
           onClose={() => {
             setShowViewModal(false);
-            if (refreshGlobalData && typeof refreshGlobalData === 'function') {
+            if (refreshGlobalData && typeof refreshGlobalData === "function") {
               refreshGlobalData();
             }
           }}
@@ -543,9 +521,8 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 1 }}
-              className={`mt-2 ${
-                cardSize || "h-124 md:h-128"
-              } flex items-center justify-center`}
+              style={{ height: `${dynamicCardHeight}px` }}
+              className="mt-2 flex items-center justify-center"
             >
               <p className="text-sm text-gray-600">{loadingMessage}</p>
             </motion.div>
@@ -559,7 +536,10 @@ export default function SearchListCard({
               transition={{ duration: 0.5 }}
             >
               {!loading && currentItems.length > 0 && (
-                <div className={`space-y-3 ${cardSize}`}>
+                <div
+                  style={{ height: `${dynamicCardHeight}px` }}
+                  className="space-y-3"
+                >
                   {currentItems.map((rowData, idx) => (
                     <div
                       key={idx}
@@ -777,13 +757,21 @@ export default function SearchListCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.75 }}
-              className={`mt-2 ${
-                cardSize || "h-124 md:h-128"
-              } flex items-center justify-center`}
+              style={{ height: `${dynamicCardHeight}px` }}
+              className="mt-2 flex flex-col items-center justify-center gap-4"
             >
               <p className="text-sm text-gray-600">
                 {error ? error : "No record found."}
               </p>
+              {(error || (data.length === 0 && !loading)) && (
+                <Button
+                  type="button"
+                  onClick={handleRefresh}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer transition-all duration-150"
+                >
+                  Refresh
+                </Button>
+              )}
             </motion.div>
           )}
 
@@ -894,6 +882,6 @@ SearchListCard.propTypes = {
   cardSize: PropTypes.string,
   mobileCardSize: PropTypes.string,
   itemsPerPage: PropTypes.number,
-  refreshGlobalData: PropTypes.func.isRequired,
+  refreshGlobalData: PropTypes.func,
   globalRefresh: PropTypes.number,
 };

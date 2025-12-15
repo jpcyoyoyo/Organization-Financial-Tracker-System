@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon server.js"
+    "start": "nodemon --ignore 'sessions.json' server.js"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +24,8 @@
     "mysql": "^2.18.1",
     "mysql2": "^3.13.0",
     "nodemon": "^3.1.9",
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0",
     "ws": "^8.18.0"
   }
 }

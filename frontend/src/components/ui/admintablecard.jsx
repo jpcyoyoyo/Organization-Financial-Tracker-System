@@ -24,7 +24,6 @@ export default function AdminTableCard({
   deleteModal: DeleteModal,
   testMode,
   testData,
-  cardSize = "h-auto",
 }) {
   // ------------------------------
   // State: Data, Loading, Filters
@@ -53,7 +52,9 @@ export default function AdminTableCard({
 
   const lastDataRef = useRef(null);
 
-  const newCardSize = "md:h-" + String(parseInt(cardSize.substring(2, 5)) + 80);
+  // Calculate dynamic card height based on itemsPerPage (36px item + space-y-1 per row + 40px padding)
+  // Fixed based on itemsPerPage, not actual data length
+  const dynamicCardHeight = Math.max(40, itemsPerPage * (36 + 5) - 4);
 
   // Update window width on resize
   useEffect(() => {
@@ -254,6 +255,11 @@ export default function AdminTableCard({
     console.log("Refreshing data...");
   }
 
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    fetchData();
+  }, [fetchData]);
+
   const handleLoadMore = useCallback(() => {
     if (mobileItemsCount < data.length) {
       setMobileItemsCount((prevCount) =>
@@ -263,18 +269,6 @@ export default function AdminTableCard({
   }, [mobileItemsCount, data.length, itemsPerPage]);
 
   useEffect(() => {
-    console.log(
-      "[MobileScroll] effect run →",
-      "windowWidth:",
-      windowWidth,
-      "mobileItemsCount:",
-      mobileItemsCount,
-      "data.length:",
-      data.length,
-      "mobileContainerRef",
-      mobileContainerRef.current
-    );
-
     if (
       windowWidth < (isCollapsed ? 768 : 1024) &&
       mobileContainerRef.current
@@ -283,21 +277,14 @@ export default function AdminTableCard({
 
       const onScroll = () => {
         const { scrollTop, clientHeight, scrollHeight } = scrollEl;
-        console.log("[MobileScroll:onScroll]", {
-          scrollTop,
-          clientHeight,
-          scrollHeight,
-        });
 
         if (scrollTop + clientHeight >= scrollHeight - 10) {
-          console.log("[MobileScroll] bottom reached → loading more");
           handleLoadMore();
         }
       };
 
       scrollEl.addEventListener("scroll", onScroll);
       return () => {
-        console.log("[MobileScroll] cleaning up listener");
         scrollEl.removeEventListener("scroll", onScroll);
       };
     }
@@ -453,17 +440,11 @@ export default function AdminTableCard({
         >
           {tableConfig.columns.map((col, index) => {
             if (col.type === "hidden") return null;
+            if (col.type === "action") return null;
             if (col.type === "icon") {
               return (
                 <div key={index} className="w-16 text-center flex-none">
                   {/* Blank header for icon column */}
-                </div>
-              );
-            }
-            if (col.type === "action") {
-              return (
-                <div key={index} className="text-center w-16 md:w-30 flex-none">
-                  {col.header || ""}
                 </div>
               );
             }
@@ -499,9 +480,8 @@ export default function AdminTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 1 }}
-            className={`h-110 ${
-              newCardSize ? newCardSize : "md:h-120"
-            } flex items-center justify-center`}
+            style={{ height: `${dynamicCardHeight}px` }}
+            className="flex items-center justify-center"
           >
             <p className="text-sm text-gray-600">{loadingMessage}</p>
           </motion.div>
@@ -514,9 +494,13 @@ export default function AdminTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.5 }}
-            className={`space-y-1 mt-2 ${
-              (!loading && data.length === 0) || loading ? "h-0" : cardSize
-            }`}
+            style={{
+              height:
+                (!loading && data.length === 0) || loading
+                  ? 0
+                  : `${dynamicCardHeight}px`,
+            }}
+            className="space-y-1 mt-2"
           >
             {currentItems.map(
               (rowData, rowIndex) =>
@@ -524,7 +508,8 @@ export default function AdminTableCard({
                 currentItems.length > 0 && (
                   <div
                     key={rowIndex}
-                    className="flex flex-row flex-nowrap bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm transition-all md:hover:-translate-y-0.5"
+                    className="flex flex-row flex-nowrap bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg shadow-sm transition-all md:hover:-translate-y-0.5 cursor-pointer"
+                    onClick={() => handleView(rowData)}
                   >
                     {tableConfig.columns.map((col, colIndex) => {
                       if (col.type === "hidden") {
@@ -621,28 +606,7 @@ export default function AdminTableCard({
                         );
                       }
                       if (col.type === "action") {
-                        if (!ViewModal) return null;
-                        return (
-                          <div
-                            key={colIndex}
-                            className="text-center w-16 md:w-30 flex items-center justify-center flex-none"
-                          >
-                            <Button
-                              className="text-black cursor-pointer flex flex-row"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleView(rowData);
-                              }}
-                            >
-                              <img
-                                src={col.iconUrl}
-                                alt="create icon"
-                                width="18"
-                              />
-                              <h1 className="ml-1">{col.name || "View"}</h1>
-                            </Button>
-                          </div>
-                        );
+                        return null;
                       }
                       return null;
                     })}
@@ -753,13 +717,23 @@ export default function AdminTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.75 }}
-            className={`h-110 ${
-              newCardSize ? newCardSize : "md:h-120"
-            } flex items-center justify-center`}
+            style={{ height: `${dynamicCardHeight}px` }}
+            className="flex items-center justify-center"
           >
-            <p className="text-sm text-gray-600">
-              {error ? error : "No record found."}
-            </p>
+            <div className="flex flex-col items-center justify-center gap-4">
+              <p className="text-sm text-gray-600">
+                {error ? error : "No record found."}
+              </p>
+              {(error || (data.length === 0 && !loading)) && (
+                <Button
+                  type="button"
+                  onClick={handleRefresh}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer transition-all duration-150"
+                >
+                  Refresh
+                </Button>
+              )}
+            </div>
           </motion.div>
         )}
 

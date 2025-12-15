@@ -146,7 +146,8 @@ export default function ViewLogModal({ isOpen, onClose, id, refreshData }) {
                     <img
                       src={
                         details.profile_pic !== null
-                          ? details.profile_pic || icons[details.profile_pic]
+                          ? icons[details.profile_pic] ||
+                            `${ip}/profile-pic/${details.profile_pic}`
                           : icons["src/assets/server.svg"]
                       }
                       alt="User Profile"

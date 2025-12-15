@@ -1,100 +1,100 @@
 {
     "topLevelTabs": [
-      { "path": "/dashboard", "label": "Dashboard", "icon": "src/assets/react.svg" }
+      { "path": "/dashboard", "label": "Dashboard", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-pie.svg", "hide": false }
     ],
     "groups": {
       "Org. Plans and Events": [
-        { "path": "/meetings", "label": "Meetings", "icon": "src/assets/react.svg" },
-        { "path": "/events", "label": "Events", "icon": "src/assets/react.svg" },
-        { "path": "/announcements", "label": "Announcements", "icon": "src/assets/react.svg" }
+        { "path": "/meetings", "label": "Meetings", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/calendar.svg", "hide": true },
+        { "path": "/events", "label": "Events", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/calendar-days.svg", "hide": true },
+        { "path": "/announcements", "label": "Announcements", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/speaker-wave.svg", "hide": true }
       ],
       "Org. Financial Status": [
-        { "path": "/budgets", "label": "Budgets", "icon": "src/assets/react.svg" },
-        { "path": "/deposits", "label": "Deposits", "icon": "src/assets/react.svg" },
-        { "path": "/expenses", "label": "Expenses", "icon": "src/assets/react.svg" },
-        { "path": "/reports", "label": "Reports", "icon": "src/assets/react.svg" }
+        { "path": "/budgets", "label": "Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.1.5/24/solid/document-currency-dollar.svg", "hide": false },
+        { "path": "/deposits", "label": "Deposits", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/arrow-up-circle.svg", "hide": false },
+        { "path": "/expenses", "label": "Expenses", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/arrow-down-circle.svg", "hide": false },
+        { "path": "/reports", "label": "Reports", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/document-text.svg", "hide": true }
       ],
       "Your Obligations": {
         "default": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true }
         ],
         "Representative": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/your-collections", "label": "Your Collections", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/inbox-stack.svg", "hide": true },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false }
         ],
         "Peace Officer": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false }
         ],
         "Procurement Officer": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false }
         ],
         "Communication Officer": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/announcement-requests", "label": "Announcement Requests", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/announcement-requests", "label": "Announcement Requests", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/bullhorn.svg", "hide": false },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false }
         ],
         "Auditor": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/audit-reports", "label": "Audit Reports", "icon": "src/assets/react.svg" },
-          { "path": "/financial-statements", "label": "Financial Statements", "icon": "src/assets/react.svg" },
-          { "path": "/organization-properties", "label": "Organization Properties", "icon": "src/assets/react.svg" },
-          { "path": "/receipts", "label": "Receipts", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/audit-reports", "label": "Audit Reports", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/document-check.svg", "hide": true },
+          { "path": "/financial-statements", "label": "Financial Statements", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/document-duplicate.svg", "hide": true },
+          { "path": "/organization-properties", "label": "Organization Properties", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/building-library.svg", "hide": true },
+          { "path": "/receipts", "label": "Receipts", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/receipt-percent.svg", "hide": false },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false }
         ],
         "Treasurer": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/your-collections", "label": "Your Collections", "icon": "src/assets/react.svg" },
-          { "path": "/draft-budget", "label": "Draft Budget", "icon": "src/assets/react.svg" },
-          { "path": "/draft-payments", "label": "Draft Payments", "icon": "src/assets/react.svg" },
-          { "path": "/manage-deposits", "label": "Manage Deposits", "icon": "src/assets/react.svg" },
-          { "path": "/manage-expenses", "label": "Manage Expenses", "icon": "src/assets/react.svg" },
-          { "path": "/manage-financial-reports", "label": "Manage Financial Reports", "icon": "src/assets/react.svg" },
-          { "path": "/manage-financial-groupings", "label": "Manage Financial Groupings", "icon": "src/assets/react.svg" },
-          { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/your-collections", "label": "Your Collections", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/inbox-stack.svg", "hide": true },
+          { "path": "/draft-budget", "label": "Draft Budget", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/document-plus.svg", "hide": false },
+          { "path": "/draft-payments", "label": "Draft Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/document-arrow-down.svg", "hide": false },
+          { "path": "/manage-deposits", "label": "Manage Deposits", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": false },
+          { "path": "/manage-expenses", "label": "Manage Expenses", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": false },
+          { "path": "/manage-financial-reports", "label": "Manage Financial Reports", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": true },
+          { "path": "/manage-financial-groupings", "label": "Manage Financial Groupings", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": false },
+          { "path": "/request-announcement", "label": "Request Announcement", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/paper-airplane.svg", "hide": true }
         ],
         "Secretary": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/manage-events", "label": "Manage Events", "icon": "src/assets/react.svg" },
-          { "path": "/manage-servicing", "label": "Manage Servicings", "icon": "src/assets/react.svg" },
-          { "path": "/manage-meetings", "label": "Manage Meetings", "icon": "src/assets/react.svg" },
-          { "path": "/organization-docs", "label": "Organization Documents", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
-          { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/manage-events", "label": "Manage Events", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": false },
+          { "path": "/manage-servicing", "label": "Manage Servicings", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": false },
+          { "path": "/manage-meetings", "label": "Manage Meetings", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-8-tooth.svg", "hide": true },
+          { "path": "/organization-docs", "label": "Organization Documents", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/folder-open.svg", "hide": true },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false },
+          { "path": "/request-announcement", "label": "Request Announcement", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/paper-airplane.svg", "hide": true }
         ],
         "Vice President": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/approvals", "label": "Approvals", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
-          { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/approvals", "label": "Approvals", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/stamp.svg", "hide": false },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false },
+          { "path": "/request-announcement", "label": "Request Announcement", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/paper-airplane.svg", "hide": true }
         ],
         "President": [
-          { "path": "/your-payments", "label": "Your Payments", "icon": "src/assets/react.svg" },
-          { "path": "/your-attendances", "label": "Your Attendances", "icon": "src/assets/react.svg" },
-          { "path": "/approvals", "label": "Approvals", "icon": "src/assets/react.svg" },
-          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "src/assets/react.svg" },
-          { "path": "/request-announcement", "label": "Request Announcement", "icon": "src/assets/react.svg" }
+          { "path": "/your-payments", "label": "Your Payments", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/credit-card.svg", "hide": false },
+          { "path": "/your-attendances", "label": "Your Attendances", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/check-circle.svg", "hide": true },
+          { "path": "/approvals", "label": "Approvals", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.1.5/24/solid/funnel.svg", "hide": false },
+          { "path": "/planned-budgets", "label": "Planned Budgets", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/chart-bar.svg", "hide": false },
+          { "path": "/request-announcement", "label": "Request Announcement", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/paper-airplane.svg", "hide": true }
         ]
       },
       "Admin Panel": [
-        { "path": "/user-management", "label": "User Management", "icon": "src/assets/react.svg" },
-        { "path": "/sections", "label": "Sections", "icon": "src/assets/react.svg" },
-        { "path": "/logs", "label": "Logs", "icon": "src/assets/react.svg" }
+        { "path": "/user-management", "label": "User Management", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/users.svg", "hide": false },
+        { "path": "/sections", "label": "Sections", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/window.svg", "hide": false },
+        { "path": "/logs", "label": "Logs", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/list-bullet.svg", "hide": false }
       ],
       "Preferences": [
-        { "path": "/settings", "label": "Settings", "icon": "src/assets/react.svg" },
-        { "path": "/logout", "label": "Log Out", "icon": "src/assets/react.svg" }
+        { "path": "/settings", "label": "Settings", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/cog-6-tooth.svg", "hide": true },
+        { "path": "/logout", "label": "Log Out", "icon": "https://cdn.jsdelivr.net/npm/heroicons@2.0.18/24/solid/arrow-left-on-rectangle.svg", "hide": false }
       ]
     }
   }

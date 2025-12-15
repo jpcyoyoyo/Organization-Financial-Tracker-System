@@ -57,6 +57,15 @@ export function useLogin() {
       if (result.token) {
         sessionStorage.setItem("authToken", result.token);
         sessionStorage.setItem("user", JSON.stringify(result.user));
+
+        // Store session ID for server-side session detection
+        if (result.sessionId) {
+          sessionStorage.setItem("sessionId", result.sessionId);
+          console.log(
+            "[Session] Server-side session started:",
+            result.sessionId
+          );
+        }
       }
 
       setSuccess("Login successful! Redirecting...");

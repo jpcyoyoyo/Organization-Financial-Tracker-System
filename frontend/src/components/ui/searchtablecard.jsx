@@ -66,7 +66,6 @@ export default function SearchTableCard({
   deleteModal: DeleteModal,
   testMode,
   testData, // { data: [...], years: [...] }
-  cardSize = "h-113 md:h-117",
   mobileCardSize = "h-120",
 }) {
   // ------------------------------
@@ -97,11 +96,28 @@ export default function SearchTableCard({
 
   const lastDataRef = useRef(null);
 
+  // Calculate dynamic card height based on itemsPerPage (~58.4px item + space-y-2 per row + 40px padding)
+  // Fixed based on itemsPerPage, not actual data length
+  const dynamicCardHeight = Math.max(40, Math.ceil(itemsPerPage * 58.4));
+
   // Update window width on resize
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Handle visibility change (tab foreground/background)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("Tab returned to foreground, refreshing data...");
+        setFetching(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
   const getMode = useCallback(() => {
@@ -149,15 +165,28 @@ export default function SearchTableCard({
         );
       setAvailableYears(Array.isArray(result.years) ? result.years : []);
       setData(sorted);
+
+      if (sorted.length === 0 && data.length === 0) {
+        console.warn("No records found.");
+        setError("No records found. Click refresh to retry.");
+        // Do NOT auto-retry on no records
+      }
     } catch (e) {
       console.error(e);
       setError(e.message);
       setData([]);
+      // Do NOT auto-retry on error
     } finally {
       setLoading(false);
       setFetching(false);
     }
-  }, [fetchUrl, requestBody]);
+  }, [fetchUrl, requestBody, data]);
+
+  // Handle manual refresh button click
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (
@@ -312,18 +341,6 @@ export default function SearchTableCard({
   }, [mobileItemsCount, data.length, itemsPerPage]);
 
   useEffect(() => {
-    console.log(
-      "[MobileScroll] effect run →",
-      "windowWidth:",
-      windowWidth,
-      "mobileItemsCount:",
-      mobileItemsCount,
-      "data.length:",
-      data.length,
-      "mobileContainerRef",
-      mobileContainerRef.current
-    );
-
     if (
       windowWidth < (isCollapsed ? 768 : 1024) &&
       mobileContainerRef.current
@@ -332,21 +349,14 @@ export default function SearchTableCard({
 
       const onScroll = () => {
         const { scrollTop, clientHeight, scrollHeight } = scrollEl;
-        console.log("[MobileScroll:onScroll]", {
-          scrollTop,
-          clientHeight,
-          scrollHeight,
-        });
 
         if (scrollTop + clientHeight >= scrollHeight - 10) {
-          console.log("[MobileScroll] bottom reached → loading more");
           handleLoadMore();
         }
       };
 
       scrollEl.addEventListener("scroll", onScroll);
       return () => {
-        console.log("[MobileScroll] cleaning up listener");
         scrollEl.removeEventListener("scroll", onScroll);
       };
     }
@@ -508,17 +518,11 @@ export default function SearchTableCard({
         >
           {tableConfig.columns.map((col, index) => {
             if (col.type === "hidden") return null;
+            if (col.type === "action") return null;
             if (col.type === "icon") {
               return (
                 <div key={index} className="w-16 text-center">
                   {/* Blank header for icon column */}
-                </div>
-              );
-            }
-            if (col.type === "action") {
-              return (
-                <div key={index} className="text-center w-16 md:w-30">
-                  {col.header || ""}
                 </div>
               );
             }
@@ -550,9 +554,8 @@ export default function SearchTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 1 }}
-            className={`mt-2 ${
-              cardSize || "h-124 md:h-128"
-            } flex items-center justify-center`}
+            style={{ height: `${dynamicCardHeight}px` }}
+            className="mt-2 flex items-center justify-center"
           >
             <p className="text-sm text-gray-600">{loadingMessage}</p>
           </motion.div>
@@ -566,12 +569,14 @@ export default function SearchTableCard({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 2 }}
               transition={{ duration: 0.5 }}
-              className={`space-y-2 mt-2 ${cardSize}`}
+              style={{ height: `${dynamicCardHeight}px` }}
+              className="space-y-2 mt-2"
             >
               {currentItems.map((rowData, rowIndex) => (
                 <div
                   key={rowIndex}
-                  className="flex flex-row h-15 bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all md:hover:-translate-y-0.5 cursor-pointer sm:cursor-default"
+                  className="flex flex-row h-15 bg-gray-50 border border-gray-300 hover:bg-gray-100 rounded-lg overflow-hidden shadow-sm transition-all md:hover:-translate-y-0.5 cursor-pointer"
+                  onClick={() => handleView(rowData)}
                 >
                   {tableConfig.columns.map((col, colIndex) => {
                     if (col.type === "hidden") {
@@ -620,28 +625,7 @@ export default function SearchTableCard({
                       );
                     }
                     if (col.type === "action") {
-                      if (!ViewModal) return null;
-                      return (
-                        <div
-                          key={colIndex}
-                          className="text-center w-16 md:w-30 flex items-center justify-center"
-                        >
-                          <Button
-                            className="text-black cursor-pointer flex flex-row"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleView(rowData);
-                            }}
-                          >
-                            <img
-                              src={col.iconUrl}
-                              alt="create icon"
-                              width="18"
-                            />
-                            <h1 className="ml-1">{col.name || "View"}</h1>
-                          </Button>
-                        </div>
-                      );
+                      return null;
                     }
                     return null;
                   })}
@@ -707,13 +691,21 @@ export default function SearchTableCard({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 2 }}
             transition={{ duration: 0.75 }}
-            className={`mt-2 ${
-              cardSize || "h-124 md:h-128"
-            } flex items-center justify-center`}
+            style={{ height: `${dynamicCardHeight}px` }}
+            className="mt-2 flex flex-col items-center justify-center gap-4"
           >
             <p className="text-sm text-gray-600">
               {error ? error : "No record found."}
             </p>
+            {(error || (data.length === 0 && !loading)) && (
+              <Button
+                type="button"
+                onClick={handleRefresh}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm cursor-pointer transition-all duration-150"
+              >
+                Refresh
+              </Button>
+            )}
           </motion.div>
         )}
 
@@ -727,7 +719,7 @@ export default function SearchTableCard({
             data.length > 0 &&
             windowWidth >= (isCollapsed ? 768 : 640) && (
               <div
-                className={`mt-4 font-[inter] hidden items-center justify-between ${
+                className={`mt-7 font-[inter] hidden items-center justify-between ${
                   isCollapsed ? "md:flex" : "lg:flex"
                 }`}
               >

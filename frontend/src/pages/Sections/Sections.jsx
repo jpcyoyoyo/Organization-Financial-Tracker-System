@@ -123,7 +123,7 @@ export default function Sections() {
         isCollapsed={isCollapsed}
         testMode={false}
         testData={testData}
-        itemsPerPage={10}
+        itemsPerPage={12}
         viewModal={ViewSectionModal}
         createModal={CreateSectionModal}
         cardSize="h-124"

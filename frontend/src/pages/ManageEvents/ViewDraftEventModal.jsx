@@ -19,17 +19,8 @@ export default function ViewDraftEventModal({
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [budgetGroups, setBudgetGroups] = useState([
-    {
-      groupName: "",
-      rows: [{ itemName: "", quantity: "", estimatedCost: "" }],
-    },
-  ]);
-  const [payments, setPayments] = useState([
-    { paymentName: "", amount: "", contributor: "", exemption: "" },
-  ]);
+  const [attendanceGroups, setAttendanceGroups] = useState([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [includePayments, setIncludePayments] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const errorRef = useRef(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -41,7 +32,7 @@ export default function ViewDraftEventModal({
 
   const ip = useContext(IpContext);
   const title =
-    details && details.published_at ? "PUBLISHED BUDGET" : "BUDGET APPROVALS";
+    details && details.published_at ? "PUBLISHED EVENT" : "EVENT APPROVALS";
 
   useEffect(() => {
     if (errorMsg && errorRef.current) {
@@ -64,27 +55,29 @@ export default function ViewDraftEventModal({
     async function fetchDetails() {
       if (!id) return;
       try {
-        const response = await fetch(`${ip}/fetch-draft-budget-details`, {
+        const response = await fetch(`${ip}/fetch-draft-event-details`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
         if (!response.ok) throw new Error("Failed to fetch details");
         const result = await response.json();
-        console.log("Fetched budget details:", result);
         if (result.status && result.data) {
           const data = result.data;
           setDetails(data);
-          setBudgetGroups(JSON.parse(data.breakdown));
-          setPayments(JSON.parse(data.payments));
-          if (data.include_payment.data[0] === 1) {
-            setIncludePayments(true);
-          } else {
-            setIncludePayments(false);
+          // Parse attendance groups if available
+          if (data.attendances) {
+            const parsedAttendance =
+              typeof data.attendances === "string"
+                ? JSON.parse(data.attendances)
+                : data.attendances;
+            setAttendanceGroups(
+              Array.isArray(parsedAttendance) ? parsedAttendance : []
+            );
           }
         }
       } catch (error) {
-        console.error("Error fetching budget details:", error);
+        console.error("Error fetching event details:", error);
       } finally {
         setLoading(false);
       }
@@ -96,7 +89,7 @@ export default function ViewDraftEventModal({
         const response = await fetch(`${ip}/fetch-approval-history`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "Budget", relating_id: id }),
+          body: JSON.stringify({ type: "Event", relating_id: id }),
         });
         if (!response.ok) {
           throw new Error("Failed to fetch approval history");
@@ -124,26 +117,20 @@ export default function ViewDraftEventModal({
     }
   }, [isOpen, id, ip]);
 
-  const calculateBudgetGroupTotal = (group) =>
-    group.rows
-      .reduce((acc, row) => acc + (parseFloat(row.estimatedCost) || 0), 0)
-      .toFixed(2);
+  // Format time for display
+  const formatTimeForDisplay = (time) => {
+    if (!time) return "";
+    if (time.includes(":")) {
+      const [hours, minutes] = time.split(":");
+      const hour = parseInt(hours, 10);
+      const ampm = hour >= 12 ? "PM" : "AM";
+      const displayHour = hour % 12 || 12;
+      return `${String(displayHour).padStart(2, "0")}:${minutes} ${ampm}`;
+    }
+    return time;
+  };
 
-  const calculateOverallBudgetTotal = () =>
-    budgetGroups
-      .reduce(
-        (acc, group) => acc + parseFloat(calculateBudgetGroupTotal(group)),
-        0
-      )
-      .toFixed(2);
-
-  // Payment total helper
-  const calculateTotalPayments = () =>
-    payments
-      .reduce((acc, payment) => acc + (parseFloat(payment.amount) || 0), 0)
-      .toFixed(2);
-
-  const cancelBudgetApproval = async () => {
+  const cancelEventApproval = async () => {
     try {
       const response = await fetch(`${ip}/cancel-budget-approval`, {
         method: "POST",
@@ -160,7 +147,7 @@ export default function ViewDraftEventModal({
       const result = await response.json();
       if (result.status) {
         handleShowNotification(
-          "Budget approval cancelled successfully",
+          "Event approval cancelled successfully",
           "success"
         );
         setShowCancelModal(false);
@@ -184,26 +171,23 @@ export default function ViewDraftEventModal({
     }
   };
 
-  const publishBudget = async () => {
+  const publishEvent = async () => {
     try {
-      const response = await fetch(`${ip}/publish-budget`, {
+      const response = await fetch(`${ip}/publish-event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id,
           approval_id: details.approval_id,
-          payments: payments,
           user_data: userData,
-          approved_at: details.approved_at_orig,
-          include_payment: details.include_payment.data[0] === 1 ? true : false,
         }),
       });
       if (!response.ok) {
-        throw new Error("Failed to publish budget");
+        throw new Error("Failed to publish event");
       }
       const result = await response.json();
       if (result.status) {
-        handleShowNotification("Budget published successfully", "success");
+        handleShowNotification("Event published successfully", "success");
         refreshData();
         onRefreshGlobalData();
         onClose();
@@ -214,8 +198,8 @@ export default function ViewDraftEventModal({
         onClose();
       }
     } catch (error) {
-      console.error("Error publishing budget:", error);
-      handleShowNotification("Error publishing budget", "error");
+      console.error("Error publishing event:", error);
+      handleShowNotification("Error publishing event", "error");
       refreshData();
       onRefreshGlobalData();
       onClose();
@@ -281,11 +265,11 @@ export default function ViewDraftEventModal({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 2 }}
                   transition={{ duration: 0.75 }}
-                  className="border rounded-xl bg-[#03fffb22]"
+                  className="border rounded-xl bg-[#e0f40a22]"
                 >
                   <div className="text-sm flex flex-col gap-2">
-                    <div className="py-3 px-4 border-b rounded-t-xl bg-sky-400">
-                      <label className="block font-semibold">Budget Name</label>
+                    <div className="py-3 px-4 border-b rounded-t-xl bg-yellow-400">
+                      <label className="block font-semibold">Event Name</label>
                       <div className="text-2xl">{details.name}</div>
                     </div>
                     <div className="pb-3 px-4 border-b">
@@ -295,14 +279,24 @@ export default function ViewDraftEventModal({
                       </div>
                     </div>
 
-                    {/* Additional details remain unchanged */}
+                    {/* Event Details */}
                     <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                       <div>
+                        <label className="flex font-semibold">Event Date</label>
+                        <div className="text-lg">
+                          {details.date || "Not Set"}
+                        </div>
+                      </div>
+                      <div>
                         <label className="flex font-semibold">
-                          Tentative Budget Amount
+                          Time Period
                         </label>
-                        <div className="text-2xl">
-                          ₱ {calculateOverallBudgetTotal()}
+                        <div className="text-lg">
+                          {details.start_time && details.end_time
+                            ? `${formatTimeForDisplay(
+                                details.start_time
+                              )} - ${formatTimeForDisplay(details.end_time)}`
+                            : "Not Set"}
                         </div>
                       </div>
                       <div>
@@ -350,7 +344,7 @@ export default function ViewDraftEventModal({
                     <div className="overflow-x-auto border rounded-lg">
                       <table className="w-full border-collapse">
                         <thead>
-                          <tr className="bg-sky-300 text-sm">
+                          <tr className="bg-yellow-300 text-sm">
                             <th className="p-2 text-left">ID</th>
                             <th className="p-2 text-left">Decision</th>
                             <th className="p-2 text-left">Action</th>
@@ -381,7 +375,7 @@ export default function ViewDraftEventModal({
                                 <td className="px-2 py-1 border-r">
                                   {record.decision !== null
                                     ? record.decision
-                                    : "Pendeing"}
+                                    : "Pending"}
                                 </td>
                                 <td className="px-2 py-1">
                                   <Button
@@ -409,10 +403,10 @@ export default function ViewDraftEventModal({
                   {details && details.status === "Ready to Publish" ? (
                     <Button
                       type="button"
-                      onClick={publishBudget}
+                      onClick={publishEvent}
                       className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded h-fit"
                     >
-                      Publish Budget
+                      Publish Event
                     </Button>
                   ) : (
                     <Button
@@ -470,7 +464,7 @@ export default function ViewDraftEventModal({
             )}
           </div>
 
-          {/* Budget Groups Section */}
+          {/* Event Details Section */}
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-xl text-gray-600">Loading...</p>
@@ -481,19 +475,19 @@ export default function ViewDraftEventModal({
                 {isMobile && (
                   <div className="border-b border-gray-500 pb-4 mb-4">
                     <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Budget Details
+                      Event Details
                     </h2>
                     <motion.div
                       initial={{ opacity: 0.1, x: -4 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 2 }}
                       transition={{ duration: 0.75 }}
-                      className="border rounded-xl bg-[#03fffb22]"
+                      className="border rounded-xl bg-[#e0f40a22]"
                     >
                       <div className="text-sm flex flex-col gap-2">
-                        <div className="py-3 px-4 border-b rounded-t-xl bg-sky-400">
+                        <div className="py-3 px-4 border-b rounded-t-xl bg-yellow-400">
                           <label className="block font-semibold">
-                            Budget Name
+                            Event Name
                           </label>
                           <div className="text-2xl">{details.name}</div>
                         </div>
@@ -506,14 +500,28 @@ export default function ViewDraftEventModal({
                           </div>
                         </div>
 
-                        {/* Additional details remain unchanged */}
+                        {/* Event Details */}
                         <div className="flex flex-col gap-6 px-4 pb-4 pt-1">
                           <div>
                             <label className="flex font-semibold">
-                              Tentative Budget Amount
+                              Event Date
                             </label>
-                            <div className="text-2xl">
-                              ₱ {calculateOverallBudgetTotal()}
+                            <div className="text-lg">
+                              {details.date || "Not Set"}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="flex font-semibold">
+                              Time Period
+                            </label>
+                            <div className="text-lg">
+                              {details.start_time && details.end_time
+                                ? `${formatTimeForDisplay(
+                                    details.start_time
+                                  )} - ${formatTimeForDisplay(
+                                    details.end_time
+                                  )}`
+                                : "Not Set"}
                             </div>
                           </div>
                           <div>
@@ -555,7 +563,7 @@ export default function ViewDraftEventModal({
                         <div className="overflow-x-auto border rounded-lg">
                           <table className="w-full border-collapse">
                             <thead>
-                              <tr className="bg-sky-300 text-sm">
+                              <tr className="bg-yellow-300 text-sm">
                                 <th className="p-2 text-left">ID</th>
                                 <th className="p-2 text-left">Decision</th>
                                 <th className="p-2 text-left">Action</th>
@@ -586,7 +594,7 @@ export default function ViewDraftEventModal({
                                     <td className="px-2 py-1 border-r">
                                       {record.decision !== null
                                         ? record.decision
-                                        : "Pendeing"}
+                                        : "Pending"}
                                     </td>
                                     <td className="px-2 py-1">
                                       <Button
@@ -610,170 +618,76 @@ export default function ViewDraftEventModal({
                     </motion.div>
                   </div>
                 )}
-                <div className="border-b border-gray-500 pb-6">
-                  <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                    Budget Groups
-                  </h2>
-                  {budgetGroups.map((group, gIdx) => (
-                    <div
-                      key={gIdx}
-                      className="mb-6 p-4 border rounded-lg bg-gray-50"
-                    >
-                      <div className="mb-3">
-                        <label className="block text-sm font-semibold">
-                          Expense Group {gIdx + 1}
-                        </label>
-                        <div className="flex flex-row space-x-2">
-                          <div className="transition-all duration-150 border-black bg-white w-full text-xl">
-                            {group.groupName || `Group ${gIdx + 1}`}
+                {/* Attendance Groups Section */}
+                {attendanceGroups.length > 0 && (
+                  <div className="border-b border-gray-500 pb-6">
+                    <h2 className="text-2xl font-semibold mb-3 text-gray-800">
+                      Attendance Groups
+                    </h2>
+                    {attendanceGroups.map((group, gIdx) => (
+                      <div
+                        key={gIdx}
+                        className="mb-6 p-4 border rounded-lg bg-gray-50"
+                      >
+                        <div className="mb-3">
+                          <label className="block text-sm font-semibold">
+                            {group.name ||
+                              group.custom_name ||
+                              `Group ${gIdx + 1}`}
+                          </label>
+                          <div className="text-sm text-gray-600">
+                            Date: {group.date || "Not Set"}
+                          </div>
+                        </div>
+                        {/* Attendance Rows Table */}
+                        <div className="border rounded-lg overflow-clip">
+                          <div className="overflow-x-auto">
+                            <table className="min-w-112.5 w-full border-collapse">
+                              <thead>
+                                <tr className="bg-yellow-400 text-sm text-white">
+                                  <th className="p-2 text-left w-3/7">
+                                    Process
+                                  </th>
+                                  <th className="p-1 px-2 text-left w-2/7">
+                                    Start Time
+                                  </th>
+                                  <th className="p-1 px-2 text-left w-2/7">
+                                    Cutoff
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.rows && group.rows.length > 0 ? (
+                                  group.rows.map((row, rIdx) => (
+                                    <tr key={rIdx} className="text-sm bg-white">
+                                      <td className="p-1 px-2 border-r border-b text-xs sm:text-sm">
+                                        {row.process}
+                                      </td>
+                                      <td className="p-1 px-2 border-r border-b text-xs sm:text-sm">
+                                        {row.start_time
+                                          ? formatTimeForDisplay(row.start_time)
+                                          : "-"}
+                                      </td>
+                                      <td className="p-1 px-2 border-r border-b text-xs sm:text-sm">
+                                        {row.cutoff || "-"}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan="3" className="p-2 text-center">
+                                      No rows
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       </div>
-                      {/* Items Table for the Group */}
-                      <div className="border rounded-lg overflow-clip">
-                        <div className="overflow-x-auto">
-                          <table className="min-w-[450px] w-full border-collapse">
-                            <thead>
-                              <tr className="bg-sky-400 text-sm text-white">
-                                <th className="p-2 text-left w-3/7 rounded-tl-lg">
-                                  Item Name
-                                </th>
-                                <th className="p-1 px-2 text-left w-2/7">
-                                  Quantity
-                                </th>
-                                <th className="p-1 px-2 text-left w-2/7">
-                                  Estimated Cost
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {group.rows.map((row, rIdx) => (
-                                <tr key={rIdx} className="text-sm bg-white">
-                                  <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                    {row.itemName}
-                                  </td>
-                                  <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                    {row.quantity}
-                                  </td>
-                                  <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                    ₱ {row.estimatedCost}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            <tfoot>
-                              <tr className="font-semibold text-sm border-t">
-                                <td className="p-2" colSpan={2}>
-                                  Group Total
-                                </td>
-                                <td className="p-2" colSpan={2}>
-                                  ₱ {calculateBudgetGroupTotal(group)}
-                                </td>
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {/* Payments Section */}
-                {includePayments && (
-                  <div className="mt-5 border-b border-gray-500 pb-6">
-                    <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                      Payments
-                    </h2>
-                    <div className="overflow-x-auto border rounded-lg bg-white">
-                      <table className="min-w-[450px] w-full border-collapse">
-                        <thead>
-                          <tr className="bg-sky-400 text-sm text-white">
-                            <th className="p-2 text-left rounded-tl-lg">
-                              Payment Name
-                            </th>
-                            <th className="p-2 text-left">Amount</th>
-                            <th className="p-2 text-left">Description</th>
-                            <th className="p-2 text-left rounded-tr-lg">
-                              Due Date
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {payments.length > 0 ? (
-                            payments.map((payment, idx) => (
-                              <tr key={idx} className="bg-white text-sm">
-                                <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                  {payment.paymentName}
-                                </td>
-                                <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                  ₱ {payment.amount}
-                                </td>
-                                <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                  {payment.description}
-                                </td>
-                                <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                                  {new Date(payment.dueDate).toLocaleString()}
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan="4" className="p-2 text-center">
-                                No payments available.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                        <tfoot>
-                          <tr className="font-semibold text-sm border-t">
-                            <td className="p-2" colSpan={1}>
-                              Total Payment
-                            </td>
-                            <td className="p-2">
-                              ₱ {calculateTotalPayments()}
-                            </td>
-                            <td className="p-2" colSpan={3}></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
+                    ))}
                   </div>
                 )}
-                {/* Overall Summary Section */}
-                <div className="mt-6">
-                  <h2 className="text-2xl font-semibold mb-3 text-gray-800">
-                    Overall Budget Summary
-                  </h2>
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-sky-400 text-sm text-white">
-                          <th className="p-2 w-8/20 text-left">Budget Group</th>
-                          <th className="p-2 w-12/20 text-left">
-                            Total Estimated Cost
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {budgetGroups.map((group, idx) => (
-                          <tr key={idx} className="bg-white text-sm">
-                            <td className="p-1 px-2 border-r border-b text-xs sm:text-sm bg-white">
-                              {group.groupName || `Group ${idx + 1}`}
-                            </td>
-                            <td className="p-1 px-2 border-b text-xs sm:text-sm bg-white">
-                              ₱ {calculateBudgetGroupTotal(group)}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="font-semibold border-t text-sm bg-white">
-                          <td className="p-2">Overall Total</td>
-                          <td className="p-2">
-                            ₱ {calculateOverallBudgetTotal()}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
                 {errorMsg && (
                   <p ref={errorRef} className="mt-8 text-red-600 text-sm">
                     {errorMsg}
@@ -791,10 +705,10 @@ export default function ViewDraftEventModal({
               {details && details.status === "Ready to Publish" ? (
                 <Button
                   type="button"
-                  onClick={publishBudget}
+                  onClick={publishEvent}
                   className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-blue-800 bg-blue-600 text-white px-4 py-2 rounded h-fit"
                 >
-                  Publish Budget
+                  Publish Event
                 </Button>
               ) : (
                 <Button
@@ -823,8 +737,8 @@ export default function ViewDraftEventModal({
         >
           <div className="p-4 h-6/9 flex justify-center">
             <p className="text-lg text-gray-800">
-              Are you sure you want to cancel the budget approval? The planned
-              budget will go back to draft if you cancel.
+              Are you sure you want to cancel the event approval? The event will
+              go back to draft if you cancel.
             </p>
           </div>
           <div className="flex justify-end space-x-2 h-2/9 p-4">
@@ -839,7 +753,7 @@ export default function ViewDraftEventModal({
             </Button>
             <Button
               type="button"
-              onClick={() => cancelBudgetApproval()}
+              onClick={() => cancelEventApproval()}
               className="transition-all duration-150 transform hover:scale-105 cursor-pointer hover:bg-purple-800 bg-purple-600 text-white px-4 py-2 rounded h-fit"
             >
               Confirm Cancellation
